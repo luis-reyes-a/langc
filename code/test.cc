@@ -7,7 +7,7 @@ union v3
 {
     struct
     {
-        float x; float x, y;
+        float x; float y, z;
     }
     struct
     {
@@ -24,5 +24,8 @@ struct v26
 internal u32
 main(u32 argc, char **argv)
 {
+    float r, g; 
+    float b;
+    float r, g; float b;
     return 0;
 }

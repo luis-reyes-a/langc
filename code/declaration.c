@@ -146,11 +146,10 @@ ParseEnum(lexer_state *lexer)
 }
 
 
-
 internal declaration * //NOTE parse_var only adds to the type_table
 ParseProcedureArgs(lexer_state *lexer, type_specifier *type)
 {
-    declaration *result = NewDeclaration(Declaration_Variable);
+    declaration *result = NewDeclaration(Declaration_ProcedureArgs);
     if(type)  result->typespec = type;
     else result->typespec = ParseTypeSpecifier(lexer);
     if(!result->typespec)   Panic();
@@ -167,12 +166,14 @@ ParseProcedureArgs(lexer_state *lexer, type_specifier *type)
         {
             if(PeekToken(lexer).type == TokenType_Identifier &&
                (NextToken(lexer).type == ',' ||
-                NextToken(lexer).type == ';'))
+                NextToken(lexer).type == ';' ||
+                NextToken(lexer).type == ')'))
             {
                 result->next = ParseProcedureArgs(lexer, result->typespec);
             }
             else
             {
+                
                 result->next = ParseProcedureArgs(lexer, 0);
             }
         }
@@ -188,6 +189,12 @@ inline declaration *
 ParseVariable(lexer_state *lexer, type_specifier *type)
 {
     declaration *result = ParseProcedureArgs(lexer, type);
+    for(declaration *decl = result;
+        decl;
+        decl = decl->next)
+    {
+        decl->type = Declaration_Variable;
+    }
     ExpectToken(lexer, ';');
     return result;
 }

@@ -81,7 +81,6 @@ typedef struct statement
 } statement;
 
 
-
-
 internal statement *ParseStatement(lexer_state *lexer);
+
 #endif

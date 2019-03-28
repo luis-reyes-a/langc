@@ -142,8 +142,9 @@ ParseStatement(lexer_state *lexer)
             {
                 result = NewStatement(Statement_Expression);
                 result->expr = ParseExpression(lexer);
+                ExpectToken(lexer, ';');
             }
-            ExpectToken(lexer, ';');
+            
         }
     }
     return result;

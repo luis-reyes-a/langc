@@ -5,14 +5,14 @@
 
 typedef enum
 {
-    Declaration_Variable,//semicolon
-    Declaration_Typedef,//semicolon
-    Declaration_Struct,
-    Declaration_Union,
-    Declaration_Enum,
-    Declaration_EnumMember,
-    Declaration_Procedure,
-    Declaration_ProcedureArgs,
+    Declaration_Variable, //u32 i;
+    Declaration_Typedef,  //typedef uint32_t u32;
+    Declaration_Struct,   //struct ident {...decls}
+    Declaration_Union,    //union {decls...}
+    Declaration_Enum,     //enum {enum_member; enum_member}  
+    Declaration_EnumMember, //ident = 4;
+    Declaration_Procedure,  //internal u32 main()
+    Declaration_ProcedureArgs, //u32 argc, char **argv
 }declaration_type;
 
 
