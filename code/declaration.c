@@ -98,9 +98,10 @@ ParseProcedure(lexer_state *lexer, u32 qualifier)
 internal declaration * //NOTE doesn't move pass the comma!
 ParseEnumMember(lexer_state *lexer)
 {
-    declaration *result = NewDeclaration(Declaration_EnumMember);
+    declaration *result = 0;
     if(WillEatTokenType(lexer, TokenType_Identifier))
     {
+        result = NewDeclaration(Declaration_EnumMember);
         result->identifier = lexer->eaten.identifier;
         if(WillEatTokenType(lexer, '='))
         {
@@ -118,11 +119,13 @@ ParseEnumMember(lexer_state *lexer)
 internal declaration *
 ParseEnum(lexer_state *lexer)
 {
-    declaration *result = NewDeclaration(Declaration_Enum);
+    declaration *result = 0;
+    
     if(!WillEatKeyword(lexer, Keyword_Enum))   
         SyntaxError(lexer->file, lexer->line_at, "Forgot enum keyword!");
     if(WillEatTokenType(lexer, TokenType_Identifier))
     {
+        result = NewDeclaration(Declaration_Enum); //TODO allow untyped enums?
         result->identifier = lexer->eaten.identifier;
         if(!FindBasicType(result->identifier))
         {
@@ -136,7 +139,8 @@ ParseEnum(lexer_state *lexer)
     ExpectToken(lexer, '{');
     result->enum_members = ParseEnumMember(lexer);
     declaration *current = result->enum_members;
-    while(PeekToken(lexer).type == ';')
+    while(WillEatTokenType(lexer, ';') &&
+          PeekToken(lexer).type != '}')
     {
         current->next = ParseEnumMember(lexer);
         current = current->next;
@@ -267,6 +271,7 @@ ParseStructUnion(lexer_state *lexer)
         if(result->members)
         {
             declaration *last_member = result->members;
+            while(last_member->next) last_member = last_member->next;
             while(PeekToken(lexer).type != '}')
             {
                 declaration *member = ParseDeclaration(lexer);

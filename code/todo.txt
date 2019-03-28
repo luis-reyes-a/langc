@@ -8,6 +8,9 @@ enum_flags flags{
         Blue,
 };
 
+
+// debut this shit!
+
 flags Flags;
 Flags.Set(Red, Green);
 

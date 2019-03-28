@@ -72,19 +72,27 @@ ParseStatement(lexer_state *lexer)
         {
             SyntaxError(lexer->file, lexer->line_at, "Expected goto handle");//TODO
         }
+        
+        
     }
     else if(WillEatTokenType(lexer, '{')) //compound
     {
-        result = ParseStatement(lexer);
-        statement *current = result; //last parsed statement
+        result = NewStatement(Statement_Compound);
+        result->compound_stmt = ParseStatement(lexer);
+        statement *current = result;
         while(PeekToken(lexer).type != '}')
         {
-            statement *last = current;
-            current = NewStatement(Statement_Compound);
-            current->compound_stmt = last;
+            Assert(current->type == Statement_Compound);
             current->compound_next = ParseStatement(lexer);
+            if(PeekToken(lexer).type != '}')
+            {
+                statement *temp = current->compound_next;
+                current->compound_next = NewStatement(Statement_Compound);
+                current->compound_next->compound_stmt = temp;
+            }
             current = current->compound_next;
         }
+        
     }
     else if(WillEatTokenType(lexer, TokenType_And)) //switch case statement
     {

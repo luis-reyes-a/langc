@@ -185,7 +185,7 @@ OutputItoa(writeable_text_buffer *buffer, u64 integer)
     if(integer == 0)  OutputChar(buffer, '0');
     else
     {
-        u32 num_places = 1;
+        u32 num_places = 0;
         for(u64 num = integer; num >= 1; num /= 10)  ++num_places;
         
         u64 copy = integer;
@@ -529,8 +529,14 @@ OutputStatement(writeable_text_buffer *buffer, statement *stmt)
     switch(stmt->type)
     {
         case Statement_Declaration: 
-        OutputDeclC(buffer, stmt->decl);
-        OutputChar(buffer, ';'); //TODO one here?
+        for(declaration *decl = stmt->decl;
+            decl;
+            decl = decl->next)
+        {
+            OutputDeclC(buffer, decl);
+        }
+        
+        //OutputChar(buffer, ';'); //TODO one here?
         break;
         
         case Statement_Expression:  
@@ -609,11 +615,11 @@ OutputStatement(writeable_text_buffer *buffer, statement *stmt)
                 outer = outer->compound_next)
             {
                 OutputStatement(buffer, outer->compound_stmt);
-                OutputCString(buffer, ";\n");
+                //OutputCString(buffer, ";\n");
             }
             Assert(outer);
             OutputStatement(buffer, outer);
-            OutputCString(buffer, ";\n}\n");
+            OutputCString(buffer, "\n}\n");
         }
         
         break;
@@ -656,7 +662,11 @@ OutputDeclC(writeable_text_buffer *buffer, declaration *decl)
         
         case Declaration_Struct: case Declaration_Union: case Declaration_Enum:  
         //NOTE structs can be nested into functions!!!
-        OutputCString(buffer, "typedef ");
+        if(decl->identifier)
+        {
+            OutputCString(buffer, "typedef ");
+        }
+        
         
         if(decl->type == Declaration_Struct) 
         {
@@ -687,8 +697,11 @@ OutputDeclC(writeable_text_buffer *buffer, declaration *decl)
         
         case Declaration_EnumMember:   
         OutputCString(buffer, decl->identifier);
-        OutputCString(buffer, " = ");
-        OutputExpression(buffer, decl->const_expr);
+        if(decl->const_expr)
+        {
+            OutputCString(buffer, " = ");
+            OutputExpression(buffer, decl->const_expr);
+        }
         OutputCString(buffer, ",\n");
         break;
         
