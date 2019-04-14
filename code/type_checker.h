@@ -31,7 +31,13 @@ typedef struct type_specifier
     type_specifier_type type;
     union
     {
-        char *identifier; //structs/unions/enums
+        struct
+        {
+            char *identifier; //structs/unions/enums
+            //declaration *user_decl;
+            bool32 needs_constructor;
+        };
+        
         struct //internal types
         {
             char *internal_identifier;
@@ -39,13 +45,17 @@ typedef struct type_specifier
         };
         struct
         {
-            struct type_specifier *base_type; //NOTE think about this
+            struct type_specifier *ptr_base_type; //NOTE think about this
             u32 star_count;
         };
         struct
         {
-            struct type_specifier *array_base; //NOTE think about this
+            struct type_specifier *array_type; //NOTE think about this
+            struct type_specifier *array_base_type;
+            //I'm tired of mixing up the order of header files for this!
+            void *array_size_expr; //should be expression *
             u64 array_size;
+            
             //TODO expression array_size;
             
         };
@@ -71,7 +81,7 @@ inline type_specifier *AddInternalType(char *identifier, internal_typespec_type 
 internal type_specifier *AddStructUnionType(char *identifier);
 internal type_specifier *AddEnumType(char *identifier);
 internal type_specifier *AddPointerType(type_specifier *base, u32 star_count);
-internal type_specifier *AddArrayType(type_specifier *base, u64 size);
+internal type_specifier *AddArrayType(type_specifier *base, type_specifier *type, u64 size);
 internal type_specifier *AddProcedureType(char *identifier);
 
 

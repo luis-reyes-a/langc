@@ -47,7 +47,7 @@ EatToken(lexer_state *lexer)
     lexer_token result = error;
     //TODO move pass whitespace
     
-    if(u64(lexer->at - lexer->start + 1) > lexer->num_characters)
+    if(u64(lexer->at - lexer->start) > lexer->num_characters)
     {
         
         return error;
@@ -99,11 +99,10 @@ EatToken(lexer_state *lexer)
     }
 #endif
     
-    
     switch(*lexer->at)
     {
         //Single character case
-        case '(':case ')':case '{':case '}':case '[':case ']':case ',':case ';':
+        case '#': case '(':case ')':case '{':case '}':case '[':case ']':case ',':case ';':
         case ':':case '~': result.type = *lexer->at; ++lexer->at; break;
         case2('!', '=', TokenType_NotEquals)break;
         case2('^', '=', TokenType_BitwiseXorAssign)break;
@@ -236,7 +235,8 @@ EatToken(lexer_state *lexer)
             }
             ++lexer->at;
         }break;
-        case '#': //must be qualifer, preproccesor done up top!
+        
+        /*case '#': //must be qualifer, preproccesor done up top!
         {
             ++lexer->at;
             string_array_search_result search = IndexInStringArray(lexer->at, global_qualifiers, ArrayCount(global_qualifiers));
@@ -246,7 +246,6 @@ EatToken(lexer_state *lexer)
                 //result.qualifier = global_qualifiers[search.index];
                 result.qualifier = search.index;
                 lexer->at += search.length;
-                break;
             }
             else
             {
@@ -254,7 +253,7 @@ EatToken(lexer_state *lexer)
                 Panic();
             }
             
-        }break;
+        }break;*/
         case_digit:{
             if(*lexer->at == '0')
             {
@@ -417,6 +416,7 @@ NextToken(lexer_state *lexer)
     EatToken(lexer);
     lexer_token result = PeekToken(lexer); 
     *lexer = temp;
+    lexer->next = result;
     return result;
 }
 

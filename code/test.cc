@@ -1,7 +1,10 @@
 struct v2
 {
-    float x, y;
+    float x;
+    float y = ###;
 }
+
+
 
 union v3
 {
@@ -45,11 +48,53 @@ struct node
 }
 
 
+enum fruits
+{
+    Apples = 0;
+    Bananas = 1;
+    Oranges = 2;
+    Melons = 3;
+    Peaches = 4;
+}
+
 internal u32
 main(u32 argc, char **argv)
 {
-    float r, g; 
-    float b;
-    float r, g; float b;
+    fruits fruit; //default to zero!
+    
+    v26 vec = { 0};
+    v26 other_vec;
+    
+    
+    
+    if fruit == 
+    {
+        == Apples
+        {
+            return fruit;
+        }
+        == Bananas
+        {
+            return fruit;
+        }
+        == Oranges
+        {
+            return fruit;
+        }
+        == Melons
+        {
+            return fruit;
+        }
+        == Peaches
+        {
+            return fruit;
+        }
+        ==
+        {
+            return 0;
+        }
+    }
+    
+    
     return 0;
 }

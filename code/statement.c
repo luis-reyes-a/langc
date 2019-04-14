@@ -9,6 +9,20 @@ NewStatement(statement_type type)
     return stmt;
 }
 
+inline void
+PopStatement()
+{
+    PopMemory(&ast_arena);
+}
+
+inline void
+AppendStatement(statement *compound, statement *stmt)
+{
+    Assert(compound->type == Statement_Compound);
+    Assert(compound->compound_tail->next == 0);
+    compound->compound_tail->next = stmt;
+    compound->compound_tail = stmt;
+}
 
 //NOTE ptr 0 and Null Statmenmt shouldn't be the same thing!
 //NOTE this parses just a single statement!!!
@@ -19,9 +33,10 @@ ParseStatement(lexer_state *lexer)
     if(WillEatKeyword(lexer, Keyword_If)) //if or 'switch'
     {
         expression *expr = ParseExpression(lexer);
-        if(WillEatTokenType(lexer, TokenType_And)) //switch
+        if(WillEatTokenType(lexer, TokenType_Equals)) //switch
         {
             result = NewStatement(Statement_Switch);
+            result->switch_expr = expr;
             result->switch_cases = ParseStatement(lexer);
             //NOTE require opening and closing braces?
         }
@@ -78,10 +93,14 @@ ParseStatement(lexer_state *lexer)
     else if(WillEatTokenType(lexer, '{')) //compound
     {
         result = NewStatement(Statement_Compound);
-        result->compound_stmt = ParseStatement(lexer);
-        statement *current = result;
+        result->compound_stmts = ParseStatement(lexer);
+        result->compound_tail = result->compound_stmts;
+        Assert(result->compound_stmts);
+        
         while(PeekToken(lexer).type != '}')
         {
+            AppendStatement(result, ParseStatement(lexer));
+#if 0
             Assert(current->type == Statement_Compound);
             current->compound_next = ParseStatement(lexer);
             if(PeekToken(lexer).type != '}')
@@ -91,10 +110,12 @@ ParseStatement(lexer_state *lexer)
                 current->compound_next->compound_stmt = temp;
             }
             current = current->compound_next;
+#endif
         }
+        ExpectToken(lexer, '}');
         
     }
-    else if(WillEatTokenType(lexer, TokenType_And)) //switch case statement
+    else if(WillEatTokenType(lexer, TokenType_Equals)) //switch case statement
     {
         result = NewStatement(Statement_SwitchCase);
         if(PeekToken(lexer).type == '{') //default case

@@ -24,9 +24,12 @@ typedef enum
 
 typedef struct declaration declaration;
 
+#include "expression.h"
+
 typedef struct statement
 {
     statement_type type;
+    struct statement *next;
     union
     {
         declaration *decl;
@@ -72,8 +75,8 @@ typedef struct statement
         };
         struct
         {
-            struct statement *compound_stmt;
-            struct statement *compound_next;
+            struct statement *compound_stmts;
+            struct statement *compound_tail;
         };
         char *goto_handle;
     };
@@ -82,5 +85,7 @@ typedef struct statement
 
 
 internal statement *ParseStatement(lexer_state *lexer);
+
+static statement *stmt_null;
 
 #endif

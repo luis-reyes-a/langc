@@ -2,6 +2,12 @@
 #define EXPRESSION_H
 #include "ast.h"
 
+//constant expression is one that is an...
+//integer, literal, real number,
+
+//expression is not constant if it's a variable or adress of a variable
+//
+
 typedef enum
 {
     Expression_None = 0,
@@ -22,6 +28,9 @@ typedef enum
     Expression_Cast,
     Expression_Call,
     Expression_ArraySubscript, 
+    Expression_CompoundInitializer,
+    Expression_SizeOf, //TODO
+    Expression_ToBeDefined, //NOTE indicates that we expect an expression later in the parsing
 } expression_type;
 
 typedef enum
@@ -77,15 +86,20 @@ typedef enum
     
 } expression_binary_type;
 
-
 typedef struct expression
 {
     expression_type type;
-    
     union
     {
-        u64 integer_value;
-        double real_value;
+        struct
+        {
+            union
+            {
+                u64 integer;
+                double real;
+            };
+            bool32 negative;
+        };
         char *identifier, *string_literal, char_literal;
         struct //unary
         {
@@ -105,9 +119,13 @@ typedef struct expression
             struct expression *tern_false_expr;
         };
         struct //compound
-        {
+        { 
+            //NOTE should I just use a linked list here?
+            //it's would simplify a lot of code but it will make structs bigger
+            //compound expressions arn't that common, maybe it's best to leave it as is
             struct expression *compound_expr;
             struct expression *compound_next; //NOTE second gets resolved before first!
+            struct expression *compound_tail;
         };
         struct //member access for structs, unions, enums
         {
@@ -136,5 +154,11 @@ typedef struct expression
         
     };
 } expression;
+
+internal expression ResolvedExpression(expression *expr);
+
+
+expression *expr_zero;
+expression *expr_zero_struct;
 
 #endif

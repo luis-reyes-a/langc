@@ -25,7 +25,7 @@ FindPointerType(type_specifier *base, u32 star_count)
     for(u32 i = 0; i < type_table.num_types; ++i)
     {
         type_specifier *typespec = type_table.types + i;
-        if(typespec->type == TypeSpec_Ptr && typespec->base_type == base)
+        if(typespec->type == TypeSpec_Ptr && typespec->ptr_base_type == base)
         {
             if(typespec->star_count == star_count)
             {
@@ -37,13 +37,13 @@ FindPointerType(type_specifier *base, u32 star_count)
 }
 
 internal type_specifier *
-FindArrayType(type_specifier *base, u64 array_size)
+FindArrayType(type_specifier *type, u64 array_size)
 {
     type_specifier *result = 0;
     for(u32 i = 0; i < type_table.num_types; ++i)
     {
         type_specifier *typespec = type_table.types + i;
-        if(typespec->type == TypeSpec_Array && typespec->array_base == base)
+        if(typespec->type == TypeSpec_Array && typespec->array_type == type)
         {
             if(typespec->array_size == array_size)
             {
@@ -80,6 +80,7 @@ AddStructUnionType(char *identifier)
     type_specifier *typespec = NewTypeTableEntry();
     typespec->type = TypeSpec_StructUnion;
     typespec->identifier = identifier;
+    //typespec->user_decl = decl;
     return typespec;
 }
 
@@ -99,18 +100,19 @@ AddPointerType(type_specifier *base, u32 star_count)
     Assert(base->type != TypeSpec_Ptr);
     Assert(star_count);
     typespec->type = TypeSpec_Ptr;
-    typespec->base_type = base;
+    typespec->ptr_base_type = base;
     typespec->star_count = star_count;
     return typespec;
 }
 
 internal type_specifier *
-AddArrayType(type_specifier *base, u64 size)
+AddArrayType(type_specifier *base, type_specifier *type, u64 size)
 {
     type_specifier *typespec = NewTypeTableEntry();
     Assert(size);
     typespec->type = TypeSpec_Array;
-    typespec->array_base = base;
+    typespec->array_base_type = base;
+    typespec->array_type = type;
     typespec->array_size = size;
     return typespec;
 }
@@ -152,12 +154,12 @@ PrintTypeSpecifier(type_specifier *typespec)
         
         case TypeSpec_Ptr: 
         {
-            printf("%s *%d", typespec->base_type->identifier, typespec->star_count);
+            printf("%s *%d", typespec->ptr_base_type->identifier, typespec->star_count);
         }break;
         
         case TypeSpec_Array: 
         { 
-            PrintTypeSpecifier(typespec->array_base);
+            PrintTypeSpecifier(typespec->array_base_type);
             printf("[%llu]", typespec->array_size);
         }break;
         

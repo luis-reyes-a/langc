@@ -33,6 +33,29 @@ NewBinaryExpression(expression_binary_type type, expression *left, expression *r
     return result;
 }
 
+inline expression *
+NewExpressionIdentifier(char *identifier)
+{
+    Assert(identifier);
+    expression *result = NewExpression(Expression_Identifier);;
+    result->identifier = identifier;
+    return result;
+}
+
+inline expression *
+NewExpressionInteger(u64 integer)
+{
+    if(integer == 0)   return expr_zero;
+    expression *result = NewExpression(Expression_Integer);
+    result->integer = integer;
+    return result;
+}
+
+inline expression *
+NewMemberAccessExpression(expression *left, char *member_identifier)
+{
+    
+}
 
 inline expression_binary_type
 BinaryTypeFromEatenOperator(lexer_state *lexer, lexer_token_type *types, u32 count)
@@ -69,14 +92,21 @@ TryParseTopExpression(lexer_state *lexer)
     if(TokenTypeInteger(&token))
     {
         EatToken(lexer);
-        result = NewExpression(Expression_Integer);
-        result->integer_value = token.integer;
+        if(lexer->eaten.integer == 0)
+        {
+            result = expr_zero;
+        }
+        else
+        {
+            result = NewExpression(Expression_Integer);
+            result->integer = lexer->eaten.integer;
+        }
     }
     else if (token.type == TokenType_Float64 || token.type == TokenType_Float)
     {
         EatToken(lexer);
         result = NewExpression(Expression_RealNumber);
-        result->real_value = token.floating;
+        result->real = token.floating;
     }
     else if (token.type == TokenType_StringLiteral)
     {
@@ -155,6 +185,7 @@ TryParseTopExpression(lexer_state *lexer)
     }
     return result;
 }
+
 
 //TODO increment and decrement operators???
 
@@ -249,6 +280,13 @@ TryParseRelationalExpression(lexer_state *lexer)
 {
     expression *left = TryParseShiftExpression(lexer);
     expression *result = left;
+    
+    //NOTE may think this is an if 'switch' statement
+    if(PeekToken(lexer).type == TokenType_Equals &&
+       NextToken(lexer).type == '{')
+    {
+        return result; //
+    }
     
     lexer_token_type ops[] = {TokenType_Equals, TokenType_NotEquals,
         TokenType_LessThanEquals, TokenType_GreaterThanEquals, '<', '>'};
@@ -363,19 +401,60 @@ TryParseAssignmentExpression(lexer_state *lexer)
     return result;
 }
 
-
+internal void
+AppendExpressionToTail(expression **tail, expression *new_expr)
+{
+    expression *tail_expr = *tail;
+    *tail = NewExpression(Expression_Compound);
+    (*tail)->compound_expr = tail_expr;
+    (*tail)->compound_next = new_expr;
+}
 
 internal expression * //NOTE parses RIGHT to LEFT!!!!
 TryParseCompoundExpression(lexer_state *lexer)
 {
-    expression *first = TryParseAssignmentExpression(lexer);
-    expression *result = first;
-    if(WillEatTokenType(lexer, ','))
+    expression *result = TryParseAssignmentExpression(lexer);
+    expression **tail = &result;
+    
+    if(WillEatTokenType(lexer, ',')) //
     {//NOTE this is parsing right to left...but it shouldn't matter as long as I know that...
-        result = NewExpression(Expression_Compound);
-        result->compound_expr = first;
-        result->compound_next = TryParseCompoundExpression(lexer);
+        //NOTE this can be rewritten without AppendToTail() 
+        //this may overbloat the stack if it gets very recursively nested!
+        AppendExpressionToTail(tail, TryParseCompoundExpression(lexer));
+        *tail = (*tail)->compound_next;
     }
+    return result;
+}
+
+
+
+internal expression * //NOTE
+ParseCompoundInitializerExpression(lexer_state *lexer)
+{
+    ExpectToken(lexer, '{');
+    expression *result = TryParseOrExpression(lexer);
+    expression **tail = &result;
+    while(WillEatTokenType(lexer, ','))
+    {
+        AppendExpressionToTail(tail, TryParseOrExpression(lexer));
+        (*tail)->type = Expression_CompoundInitializer;
+        tail = &((*tail)->compound_next);
+    }
+    if(result->type != Expression_CompoundInitializer)
+    {
+        if(result == expr_zero)
+        {
+            result = expr_zero_struct;
+        }
+        else
+        {
+            expression *last = result;
+            result = NewExpression(Expression_CompoundInitializer);
+            result->compound_expr = last;
+        }
+    }
+    ExpectToken(lexer, '}');
+    
     return result;
 }
 
@@ -467,10 +546,10 @@ PrintExpression(expression *expr, u32 indent)
                 printf("\'%c\'", expr->char_literal);
             }break;
             case Expression_Integer: { 
-                printf("%llu", expr->integer_value);
+                printf("%llu", expr->integer);
             }break;
             case Expression_RealNumber: { 
-                printf("%ff", (float)expr->real_value);
+                printf("%ff", (float)expr->real);
             }break;
             case Expression_Binary: { 
                 printf("(");
@@ -550,10 +629,361 @@ PrintExpression(expression *expr, u32 indent)
 
 #undef CasePrint
 
+#if 0
+typedef enum
+{
+    ExpressionResult_Invalid,
+    ExpressionResult_Integer,
+    ExpressionResult_RealNumnber,
+    ExpressionResult_StringLiteral,
+    ExpressionResult_CharLiteral,
+}expression_result_type;
+
+typedef struct
+{
+    expression_result_type type;
+    union
+    {
+        u64 integer;
+        double real_number;
+        char *string;
+        char character;
+    }
+} expression_result;
+
+inline bool32
+IsExpressionResultNumerical(expression_result result)
+{
+    if(result.type == ExpressionResult_Integer ||
+       result.type == ExpressionResult_RealNumnber)
+        return true;
+    else return false;
+}
+#endif
 
 
 
+inline int
+ExpressionIsConstant(expression *expr)
+{
+    if(expr->type == Expression_CharLiteral ||
+       expr->type == Expression_StringLiteral ||
+       expr->type == Expression_Integer ||
+       expr->type == Expression_RealNumber ||
+       expr == expr_zero_struct)
+    {
+        return true;
+    }
+    else return false;
+}
 
+inline int
+ExpressionIsNumerical(expression *expr)
+{
+    if(expr->type == Expression_Integer ||
+       expr->type == Expression_RealNumber ||
+       expr == expr_zero)
+        return true;
+    else return false;
+}
+
+#define COMMENT(...)
+
+#define case_relational(_left, _right, _op, _result)\
+if(ExpressionIsNumerical(&_left) && \
+ExpressionIsNumerical(&_right))\
+{\
+    if(_left.type == Expression_Integer &&\
+    _right.type == Expression_Integer)\
+    {\
+        _result.type = Expression_Integer;\
+        _result.integer = _left.integer _op _right.integer;\
+        \
+    }\
+    else if(_left.type == Expression_RealNumber &&\
+    _right.type == Expression_RealNumber)\
+    {\
+        _result.type = Expression_Integer;\
+        _result.integer = _left.integer _op _right.integer;\
+        \
+    }\
+    else\
+    {\
+        Panic("Type mismatch!");\
+    }\
+}
+
+#define case_arithmatic(_left, _right, _op, _result)\
+if(ExpressionIsNumerical(&_left) && \
+ExpressionIsNumerical(&_right))\
+{\
+    if(_left.type == Expression_Integer &&\
+    _right.type == Expression_Integer)\
+    {\
+        _result.type = Expression_Integer;\
+        _result.integer = _left.integer _op _right.integer;\
+    }\
+    else\
+    {\
+        COMMENT("What are C's integer promotion rules?")\
+        _result.type = Expression_RealNumber;\
+        if(_left.type == Expression_RealNumber &&\
+        _right.type == Expression_RealNumber)\
+        {\
+            _result.real = _left.real _op _right.real;\
+        }\
+        else if(_left.type == Expression_RealNumber)\
+        {\
+            _result.real = _left.real _op _right.integer;\
+        }\
+        else if(_right.type == Expression_RealNumber)\
+        {\
+            _result.real = _left.integer _op  _right.real;\
+        }\
+        else Panic();\
+    }\
+}
+
+#define case_comparison(_left, _right, _op, _result)\
+if(_left.type == Expression_Integer &&\
+_right.type == Expression_Integer)\
+{\
+    _result.type = Expression_Integer;\
+    _result.integer = _left.integer _op _right.integer;\
+}
+
+inline int
+CanResolveExpression(expression *expr)
+{
+    expression test = ResolvedExpression(expr);
+    int result = ExpressionIsConstant(&test);
+    return result;
+}
+
+
+//NOTE this creates a new constant expr, if it already was, then it dups it
+internal expression //returns a constant expression
+ResolvedExpression(expression *expr)
+{
+    expression result = {0};
+    if(ExpressionIsConstant(expr)) //NOTE I think I will make copies
+    {
+        result = *expr;
+        return result;
+    }
+    switch(expr->type)
+    {
+        case Expression_Binary:
+        {
+            expression  left = ResolvedExpression(expr->binary_left);
+            expression  right = ResolvedExpression(expr->binary_right);
+            switch(expr->binary_type)
+            {
+                case Binary_Mod:
+                {
+                    if(left.type == Expression_Integer &&
+                       right.type == Expression_Integer)
+                    {
+                        result.type = Expression_Integer;
+                        result.integer = left.integer + right.integer;
+                    }
+                    else
+                    {
+                        Panic();//TODO output message, can only mod on integers!
+                    }
+                }break;
+                case Binary_Add:
+                {
+                    case_arithmatic(left, right, +, result);
+                }break;
+                case Binary_Sub:
+                {
+                    case_arithmatic(left, right, -, result)
+                }break;
+                case Binary_Mul:
+                {
+                    case_arithmatic(left, right, *, result);
+                }break;
+                case Binary_Div:
+                {
+                    if(ExpressionIsNumerical(&left) && 
+                       ExpressionIsNumerical(&right))
+                    {
+                        if(right.integer == 0)
+                        {
+                            Panic(); //TODO div by zero error!
+                        }
+                        else
+                        {
+                            case_arithmatic(left, right, /, result);
+                        }
+                    }
+                }break;
+                
+                case Binary_GreaterThan:
+                {
+                    case_relational(left, right, >, result);
+                }break;
+                case Binary_LessThan:
+                {
+                    case_relational(left, right, <, result);
+                }break;
+                case Binary_GreaterThanEquals:
+                {
+                    case_relational(left, right, >=, result);
+                }break;
+                case Binary_LessThanEquals:
+                {
+                    case_relational(left, right, <=, result);
+                }break;
+                case Binary_Equals:
+                {
+                    case_relational(left, right, ==, result);
+                }break;
+                case Binary_NotEquals:
+                {
+                    case_relational(left, right, !=, result);
+                }break;
+                
+                case Binary_And:
+                {
+                    case_comparison(left, right, &&, result);
+                }break;
+                case Binary_Or:
+                {
+                    case_comparison(left, right, ||, result);
+                }break;
+                
+                case Binary_BitwiseAnd:
+                {
+                    case_comparison(left, right, &, result);
+                }break;
+                case Binary_BitwiseOr:
+                {
+                    case_comparison(left, right, |, result);
+                }break;
+                case Binary_BitwiseXor:
+                {
+                    case_comparison(left, right, ^, result);
+                }break;
+                //NOTE not comparison but I want the same desired effect
+                case Binary_LeftShift:
+                {
+                    case_comparison(left, right, <<, result);
+                }break;
+                case Binary_RightShift:
+                {
+                    case_comparison(left, right, >>, result);
+                }break;
+                
+                case Binary_Assign:case Binary_AndAssign:case Binary_OrAssign:
+                case Binary_XorAssign:case Binary_AddAssign:case Binary_SubAssign:
+                case Binary_MulAssign:case Binary_DivAssign:case Binary_ModAssign:
+                {
+                    Panic("Not const expression");
+                }
+                default: Panic();
+            }
+        }break;
+        case Expression_Unary:
+        {
+            case Unary_Minus:
+            {
+                expression unary_expr = ResolvedExpression(expr->unary_expr);
+                if(ExpressionIsNumerical(&unary_expr))
+                {
+                    result = unary_expr;
+                    result.negative = !result.negative;
+                }
+            }break;
+            
+            case Unary_Not:
+            {
+                expression unary_expr = ResolvedExpression(expr->unary_expr);
+                if(ExpressionIsNumerical(&unary_expr))
+                {
+                    if(unary_expr.type == Expression_Integer)
+                    {
+                        unary_expr.integer = !unary_expr.integer;
+                    }
+                    else
+                    {
+                        unary_expr.real = !unary_expr.real;
+                    }
+                }
+            }break;
+            
+            case Unary_Dereference: case Unary_AddressOf:
+            case Unary_PreIncrement: case Unary_PreDecrement:
+            case Unary_PostIncrement: case Unary_PostDecrement:
+            {
+                Panic("Not a constant expression!");
+            }break;
+            default: Panic();
+        }break;
+        case Expression_MemberAccess:
+        {
+            //TODO in C this wouldn't be true but what if I scoped globals to structs?
+            //TODO struct-scoped constants
+            Panic();
+        }break;
+        case Expression_Compound:
+        {
+            result = ResolvedExpression(expr->compound_tail);
+        }
+        case Expression_Ternary:
+        {
+            expression const_cond = ResolvedExpression(expr->tern_cond);
+            expression const_true = ResolvedExpression(expr->tern_true_expr);
+            expression const_false = ResolvedExpression(expr->tern_false_expr);
+            if(ExpressionIsConstant(&const_cond) &&
+               ExpressionIsConstant(&const_true) &&
+               ExpressionIsConstant(&const_false))
+            {
+                if(const_cond.type == Expression_Integer)
+                {
+                    if(const_cond.integer == true)
+                    {
+                        result = const_true;
+                    }
+                    else
+                    {
+                        result = const_false;
+                    }
+                }
+                else Panic(); //TODO
+            }
+        }break;
+        
+        case Expression_CompoundInitializer:
+        {
+            bool32 constant = true;
+            expression *outer;
+            for(outer = expr;
+                outer->type == Expression_Compound;
+                outer = outer->compound_next)
+            {
+                if(!CanResolveExpression(expr->compound_expr))
+                {
+                    constant = false;
+                    break;
+                }
+            }
+            if(constant && outer)
+            {
+                //last 
+                result = ResolvedExpression(outer);
+            }
+        }break;
+        
+        case Expression_Cast:case Expression_Call:
+        case Expression_ArraySubscript: case Expression_ToBeDefined:
+        {
+            Panic("Not const expression!");
+        }break;
+    }
+    return result;
+}
 
 
 
@@ -608,15 +1038,5 @@ TryParseOrExpression(lexer_state *lexer)
     }
     else return left;
 }
-
-
-
-
-
-
-
-
-
-
 
 #endif

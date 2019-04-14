@@ -11,6 +11,7 @@ typedef struct
     char *base;
     u32 used;
     u32 size;
+    u32 last_push_size;
 }memory_arena;
 
 
@@ -25,12 +26,19 @@ PushMemory(memory_arena *arena, u32 size_to_push)
     {
         result = arena->base + arena->used;
         arena->used += size_to_push;
+        arena->last_push_size = size_to_push;
     }
     else
     {
         Panic();
     }
     return result;
+}
+
+inline void
+PopMemory(memory_arena *arena)
+{//NOTE this will cause dangling pointers!
+    arena->used -= arena->last_push_size;
 }
 
 inline memory_arena
@@ -42,6 +50,7 @@ PushMemoryArena(memory_arena *arena, u32 size)
     result.used = 0;
     return result;
 }
+
 
 
 

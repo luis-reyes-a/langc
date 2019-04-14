@@ -20,6 +20,17 @@ struct
     memory_arena arena;
 }string_intern_table;
 
+inline int
+IsWhiteSpace(char c)
+{
+    if(c == ' ' || c == '\n' || c == '\t' ||
+       c == '\r' || c == '\b')
+    {
+        return true;
+    }
+    else return false;
+}
+
 inline bool32 //NOTE does not compare the null terminator!
 StringsMatchLength(char *a, char *b, u32 length)
 {
@@ -35,7 +46,13 @@ StringsMatchLength(char *a, char *b, u32 length)
             return false;
         }
     }
-    return true;
+    
+    if((a[length] == 0 || IsWhiteSpace(a[length])) &&
+       (b[length] == 0 || IsWhiteSpace(b[length])))
+    {
+        return true;
+    }
+    else return false;
 }
 
 #define StringMatchesLiteral(string, literal) StringsMatchLength(string, literal, sizeof(literal) - 1)
@@ -164,7 +181,7 @@ AtoiUnsigned(char *string, u32 length)
 }
 
 
-internal u64
+internal u64 //NOTE doesn't count null terminator
 StringLength64(char *string)
 {
     u32 length = 0;
@@ -191,9 +208,30 @@ StringLength(char *string)
     }
 }
 
+//memory_arena string_builder_arena;
+
+internal char *
+ConcatCStringsIntern(char *string1, char *string2)
+{
+    u32 len1 = StringLength(string1);
+    u32 len2 = StringLength(string2);
+    
+    char temp[512];
+    Assert(len1 + len2 <= ArrayCount(temp));
+    char *at = temp;
+    while(*string1)
+    {
+        *at++ = *string1++;
+    }
+    while(*string2)
+    {
+        *at++ = *string2++;
+    }
+    
+    return StringIntern(temp, len1 + len2);
+}
+
 //TODO think about what I need register?
-
-
 
 
 typedef struct 
@@ -222,11 +260,11 @@ IndexInStringArray(char *at, char **array, u32 array_count)
 }
 
 
+
 static void
 MovePassWhitespace(char **at)
 {
-    while(**at == ' ' || **at == '\n' || **at == '\t' ||
-          **at == '\r' || **at == '\b')//TODO more
+    while(IsWhiteSpace(**at))//TODO more
     {
         ++*at;
     }

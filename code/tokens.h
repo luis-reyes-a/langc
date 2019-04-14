@@ -68,6 +68,7 @@ typedef enum
     Keyword_Struct,
     Keyword_Union,
     Keyword_Enum,
+    Keyword_EnumFlags,
     Keyword_Typedef,
     Keyword_Sizeof,
     Keyword_Offsetof,
@@ -84,11 +85,11 @@ typedef enum
     
 } keyword_type;
 
-//TODO macronize this
 
+//TODO macronize this
 static char *global_keywords[] = {"___reserved___", "if", "then", "else",
     "while", "for", "break", "continue", "return", "defer",
-    "struct", "union", "enum", "typedef", "sizeof", "offsetof",
+    "struct", "union", "enum", "enum_flags", "typedef", "sizeof", "offsetof",
     "const", "goto", "inline", "no_inline", "internal", "external"};
 
 
@@ -126,7 +127,10 @@ typedef struct
     
     lexer_token eaten;
     lexer_token peek;
+    lexer_token next;
 }lexer_state;
+
+
 
 //NOTE only EatToken advances token stream, Peek looks at current token, next at next token
 internal lexer_token EatToken(lexer_state *lexer);

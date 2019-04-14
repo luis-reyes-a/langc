@@ -1,29 +1,15 @@
-sizeof(*ptr)
+*temporarily type anonymous structs/unions for later lookup
+when using that types in expressions and stuff
+*enum flags
+*how to use this from the command line from anywhere
+*figure out namespacing, that variable names don't repeat!
+*implement sizeof expression
 
-call(*ptr, )
-
-enum_flags flags{
-        Red,
-        Green,
-        Blue,
-};
-
-
-// debut this shit!
-
-flags Flags;
-Flags.Set(Red, Green);
-
-//NOTE this will have to work on any integral type!
-if(Flag.Has(Red, Green, Blue)) // Flag & Green || Flag & Blue || Flag & Red
-Flags.Set(Blue); //sets bit field to 1
-Flags.Clr()      //sets bit field to 0
-Flags.Neg()      //negates bit field, two's complement?
-Flags.Has()      //true if has all bit fields  (F & b) && (F & c) && (F & d)
-Flags.One()      //true if one bifield is set  (F & b) || (F & c) || (f & d)  
-Flags.SetCount() //how many bitfields are set
+*out of order decls!
 
 
+
+Execution order
 // () parenthetical
 // calls, arrays, numbers, literals, identifiers
 // * & + ! 
@@ -33,58 +19,17 @@ Flags.SetCount() //how many bitfields are set
 // < > <= >= == != 
 // && 
 // ||
-
-struct {
-    
-    
-} my_only_struct;
-
-if a < b == b > c;
-if a && b || c && d
-
 // ternary
 // assignment
-// compound
+// compound () 
 
-bool is_odd = if(a % 3 == 0) true else false;
-bool is_even = if a % 2 == 0 then true else false;
-
-if token.type == TokenType_Keyword
-{
-    
-}
-else if token.type == TokenType_Const
-{
-    
-}
-
-for u32 i = 0; i < 10; ++i
-{
-    
-}
-
-u32 array[10]
-
-for i in 0..ArrayCount(array)-1
-
-for u32 *elem in array
-{
-    
-}
-
-enum_flags my_flags
-{
-    Flag1,//(1 << 0)
-        Flag2,//(1 << 1)
-        Flag3,//(1 << 2)
-        Flag4,//(1 << 3)
-};
-
-my_flags flags = Flag1;
-
-
-
-if x < 10 then
-do_this();
-else
-do_this_two();
+//bitwise manipulation
+//NOTE this will have to work on any integral type!
+flags Flags;
+if(Flag.Has(Red, Green, Blue)) // Flag & Green || Flag & Blue || Flag & Red
+Flags.Set(Blue); //sets bit field to 1
+Flags.Clr()      //sets bit field to 0
+Flags.Neg()      //negates bit field, two's complement?
+Flags.Has()      //true if has all bit fields  (F & b) && (F & c) && (F & d)
+Flags.One()      //true if one bifield is set  (F & b) || (F & c) || (f & d)  
+Flags.SetCount() //how many bitfields are set
