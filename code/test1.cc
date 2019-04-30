@@ -1,35 +1,20 @@
-enum_flags node_type
-{
-    NodeType_Invalid;
-    NodeType_Integer;
-    NodeType_RealNumber;
-    NodeType_Color;
-}
-
-struct node
-{
-    node *next;
-    node_type type = NodeType_Invalid;
-    union
-    {
-        u32 integer;
-        float real_number;
-        float [2+4 * 2]color;
-    }
-} 
-
-
-
+include "stdint.h";
 
 internal s32 
-main(u32 argc, char **argv)
+main(u32 argc = 0, char **argv = 0)
 {
-    node Node;
-    Node.type = NodeType_Color;
-    Node.color[0] = 1;
-    
-    
-    return 0;
+    struct1 foo;
+    s32 result = print-f("Hello World!");
+    return result;
 }
+
+struct struct1
+{
+    u32 something;
+}
+
+
+
+
 
 

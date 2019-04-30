@@ -11,18 +11,14 @@ typedef enum
     Statement_SwitchCase, 
     Statement_While,
     Statement_For, //TODO may have more than one type of for loop!
-    Statement_Defer,//TODO def do this one!
-    Statement_Goto,//TODO think about this...
+    Statement_Defer,
+    //Statement_Goto, do I need this?
     Statement_Break,
     Statement_Continue,
     Statement_Return,
     Statement_Compound,
     Statement_Null,
 } statement_type;
-
-
-
-typedef struct declaration declaration;
 
 #include "expression.h"
 
@@ -32,59 +28,39 @@ typedef struct statement
     struct statement *next;
     union
     {
-        declaration *decl;
+        
+        declaration *decl; //NOTE this can only be a single decl for decl_list to work
         expression *expr;
-        struct 
+        struct //if, else, switch, cases, while, 
         {
-            expression *if_expr;
-            struct statement *if_stmt;
+            expression *cond_expr;
+            expression *cond_expr_as_const;
+            struct statement *cond_stmt;
         };
-        struct
+        struct //defer
         {
-            struct statement *else_stmt;
+            struct statement *defer_stmt;
         };
-        struct
+        struct //for
         {
-            expression *switch_expr;
-            struct statement *switch_cases;
-        };
-        struct
-        {
-            expression *case_label;
-            struct statement *case_statement;
-        };
-        struct
-        {
-            expression *while_expr;
-            struct statement *while_stmt;
-        };
-        struct
-        {//NOTE implement some more types of for loops
             struct statement *for_init_stmt;
             expression *for_expr2;
             expression *for_expr3;
             struct statement *for_stmt;
         };
-        struct
-        {
-            expression *return_expr;
-        };
-        struct
-        {
-            struct statement *defer_stmt;
-        };
-        struct
+        
+        struct //compound statement
         {
             struct statement *compound_stmts;
             struct statement *compound_tail;
+            declaration_list decl_list;
         };
-        char *goto_handle;
     };
     
 } statement;
 
 
-internal statement *ParseStatement(lexer_state *lexer);
+internal statement *ParseStatement(lexer_state *lexer, declaration_list *list, declaration *top_decl);
 
 static statement *stmt_null;
 

@@ -1,11 +1,20 @@
+*implement resolveexpression rename prev to ConstExpression()
+*expression checking and typechecking
+*free list for everything, 
+*implement sizeof expression
+*insert code directly
+*macro expansion and introspection
 *temporarily type anonymous structs/unions for later lookup
 when using that types in expressions and stuff
-*enum flags
-*how to use this from the command line from anywhere
-*figure out namespacing, that variable names don't repeat!
-*implement sizeof expression
+*multiple return values
 
-*out of order decls!
+
+
+
+
+
+
+
 
 
 
@@ -21,7 +30,7 @@ Execution order
 // ||
 // ternary
 // assignment
-// compound () 
+// compound
 
 //bitwise manipulation
 //NOTE this will have to work on any integral type!

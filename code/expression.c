@@ -9,6 +9,7 @@ NewExpression(expression_type type)
     expression *expr = PushType(&ast_arena, expression);
     *expr = (expression) { 0 };
     expr->type = type;
+    
     return expr;
 }
 
@@ -38,7 +39,7 @@ NewExpressionIdentifier(char *identifier)
 {
     Assert(identifier);
     expression *result = NewExpression(Expression_Identifier);;
-    result->identifier = identifier;
+    result->identifier = StringIntern(identifier, StringLength(identifier));
     return result;
 }
 
@@ -51,12 +52,8 @@ NewExpressionInteger(u64 integer)
     return result;
 }
 
-inline expression *
-NewMemberAccessExpression(expression *left, char *member_identifier)
-{
-    
-}
 
+#if 1
 inline expression_binary_type
 BinaryTypeFromEatenOperator(lexer_state *lexer, lexer_token_type *types, u32 count)
 {
@@ -69,6 +66,7 @@ BinaryTypeFromEatenOperator(lexer_state *lexer, lexer_token_type *types, u32 cou
     }
     return Binary_None;
 }
+#endif
 
 inline expression *ParseExpression(lexer_state *lexer);
 
@@ -88,10 +86,8 @@ internal expression *
 TryParseTopExpression(lexer_state *lexer)
 {
     expression *result = 0;
-    lexer_token token = PeekToken(lexer);
-    if(TokenTypeInteger(&token))
+    if(WillEatTokenType(lexer, TokenType_Integer))
     {
-        EatToken(lexer);
         if(lexer->eaten.integer == 0)
         {
             result = expr_zero;
@@ -102,86 +98,79 @@ TryParseTopExpression(lexer_state *lexer)
             result->integer = lexer->eaten.integer;
         }
     }
-    else if (token.type == TokenType_Float64 || token.type == TokenType_Float)
+    else if (WillEatTokenType(lexer, TokenType_Float))
     {
-        EatToken(lexer);
         result = NewExpression(Expression_RealNumber);
-        result->real = token.floating;
+        result->real = lexer->eaten.floating;
     }
-    else if (token.type == TokenType_StringLiteral)
+    else if (WillEatTokenType(lexer, TokenType_StringLiteral))
     {
-        EatToken(lexer);
         result = NewExpression(Expression_StringLiteral);
-        result->string_literal = token.string;
+        result->string_literal = lexer->eaten.string;
     }
-    else if (token.type == TokenType_CharacterLiteral)
+    else if (WillEatTokenType(lexer, TokenType_CharacterLiteral))
     {
-        EatToken(lexer);
         result = NewExpression(Expression_CharLiteral);
-        result->char_literal = token.character;
+        result->char_literal = lexer->eaten.character;
     }
-    else if (token.type == TokenType_PlusPlus || token.type == TokenType_MinusMinus)
+    else if (WillEatTokenType(lexer, TokenType_PlusPlus) || WillEatTokenType(lexer, TokenType_MinusMinus))
     {
         Panic(); //TODO
     }
-    else if(token.type == '(')
+    else if(PeekToken(lexer).type == '(' ||
+            lexer->peek.type == TokenType_Identifier)
     {
-        result = TryParseParentheticalExpression(lexer);
-        //NOTE should this be on top? it really doesn't matter in this case
-        //but it feels like it should be moved up since it has a higher precedence
-    }
-    else if(token.type == TokenType_Identifier)
-    {
-        EatToken(lexer);
-        result = NewExpression(Expression_Identifier);
-        result->identifier = token.identifier;
+        if(lexer->peek.type == '(')
+        {
+            result = TryParseParentheticalExpression(lexer);
+        }
+        else
+        {
+            EatToken(lexer);
+            result = NewExpression(Expression_Identifier);
+            result->identifier = lexer->eaten.identifier;
+        }
+        
+        
+        while(PeekToken(lexer).type == '(' /*CALL*/ ||
+              lexer->peek.type == '['      /*ARRAY*/ ||
+              lexer->peek.type == '.'      /*ACCESS*/)
+        {
+            expression *left = result;
+            //TODO check left is valid expression here for each of the cases
+            
+            if(WillEatTokenType(lexer,'(')) //call
+            {
+                result = NewExpression(Expression_Call);
+                result->call_expr = left;
+                result->call_args = ParseExpression(lexer); 
+                ExpectToken(lexer, ')');
+            }
+            else if(WillEatTokenType(lexer,'[')) //array subscript
+            {
+                result = NewExpression(Expression_ArraySubscript);
+                result->array_expr = left;
+                result->call_args = ParseExpression(lexer); 
+                ExpectToken(lexer, ']');
+            }
+            else if(WillEatTokenType(lexer,'.')) //member access(through ptr also)
+            {
+                result = NewExpression(Expression_MemberAccess);
+                result->struct_expr = left;
+                if(WillEatTokenType(lexer, TokenType_Identifier))
+                {
+                    result->struct_member_identifier = lexer->eaten.identifier;
+                }
+                else
+                {
+                    SyntaxError(lexer->file, lexer->line_at, "Expected member identifier");
+                }
+            }
+        }
     }
     else
     {
-        SyntaxError(lexer->file, lexer->line_at, "..."); //TODO more cases I'm not thinking about?
-    }
-    
-    token = PeekToken(lexer);
-    while(token.type == '(' /*CALL*/ ||
-          token.type == '[' /*ARRAY*/ ||
-          token.type == '.' /*ACCESS*/)
-    {
-        expression *left = result;
-        if(left->type == Expression_Integer || left->type == Expression_RealNumber)
-        { //TODO more checking that left is a valid expression for this expression types!!!
-            SyntaxError(lexer->file, lexer->line_at, "Check for more invalid expressions...");
-        }
-        if(WillEatTokenType(lexer,'(')) //call
-        {
-            result = NewExpression(Expression_Call);
-            result->call_expr = left;
-            result->call_args = ParseExpression(lexer); 
-            ExpectToken(lexer, ')');
-        }
-        else if(WillEatTokenType(lexer,'[')) //array subscript
-        {
-            result = NewExpression(Expression_ArraySubscript);
-            result->array_expr = left;
-            result->call_args = ParseExpression(lexer); 
-            ExpectToken(lexer, ']');
-        }
-        else if(WillEatTokenType(lexer,'.')) //member access(through ptr also)
-        {
-            result = NewExpression(Expression_MemberAccess);
-            result->struct_expr = left;
-            token = PeekToken(lexer);
-            if(token.type == TokenType_Identifier)
-            {
-                EatToken(lexer);
-                result->struct_member_identifier = token.identifier;
-            }
-            else
-            {
-                //TODO
-                SyntaxError(token.file, token.line, "Expected member identifier");
-            }
-        }
-        token = PeekToken(lexer);
+        SyntaxError(lexer->file, lexer->line_at, "Can't parse top prec expression"); 
     }
     return result;
 }
@@ -421,7 +410,7 @@ TryParseCompoundExpression(lexer_state *lexer)
         //NOTE this can be rewritten without AppendToTail() 
         //this may overbloat the stack if it gets very recursively nested!
         AppendExpressionToTail(tail, TryParseCompoundExpression(lexer));
-        *tail = (*tail)->compound_next;
+        //*tail = (*tail)->compound_next;
     }
     return result;
 }
@@ -463,205 +452,6 @@ ParseExpression(lexer_state *lexer)
 {
     return TryParseCompoundExpression(lexer);
 }
-
-
-
-
-#define CasePrint(_case) case _case: printf("%s", #_case); break
-
-#define CasePrintChar(_case) case _case: printf("%c", _case); break;
-
-inline void
-PrintBinaryOperator(expression_binary_type type)
-{
-    switch(type)
-    {
-        CasePrintChar(Binary_Mod);
-        CasePrintChar(Binary_Add);
-        CasePrintChar(Binary_Sub);
-        CasePrintChar(Binary_Mul);
-        CasePrintChar(Binary_Div);
-        CasePrintChar(Binary_GreaterThan);
-        CasePrintChar(Binary_LessThan);
-        case Binary_GreaterThanEquals: printf(">="); break;
-        case Binary_LessThanEquals: printf("<="); break;
-        case Binary_Equals: printf("=="); break;
-        case Binary_NotEquals: printf("!="); break;
-        case Binary_And: printf("&&"); break;
-        case Binary_Or: printf("||"); break;
-        CasePrintChar(Binary_BitwiseAnd) ;
-        CasePrintChar(Binary_BitwiseOr);
-        CasePrintChar(Binary_BitwiseXor);
-        CasePrintChar(Binary_Assign) ;
-        case Binary_AndAssign: printf("&="); break;
-        case Binary_OrAssign: printf("|="); break;
-        case Binary_XorAssign: printf("^="); break;
-        case Binary_AddAssign: printf("+="); break;
-        case Binary_SubAssign: printf("-="); break;
-        case Binary_MulAssign: printf("*="); break;
-        case Binary_DivAssign: printf("/="); break;
-        case Binary_ModAssign: printf("%%="); break;
-        case Binary_LeftShift: printf("<<"); break;
-        case Binary_RightShift: printf(">>"); break;
-        default: Panic();
-    }
-}
-
-inline void
-PrintUnaryOperator(expression_unary_type type)
-{
-    switch(type)
-    {
-        //CasePrintChar(Unary_Plus);
-        CasePrintChar(Unary_Minus);
-        case Unary_PreIncrement: case Unary_PostIncrement: printf("++"); break;
-        case Unary_PreDecrement: case Unary_PostDecrement: printf("--"); break;
-        //CasePrintChar(Unary_BitwiseNot);
-        CasePrintChar(Unary_Not);
-        CasePrintChar(Unary_Dereference);
-        CasePrintChar(Unary_AddressOf);
-        default: Panic();
-    }
-}
-
-
-internal void
-PrintExpression(expression *expr, u32 indent)
-{
-    u32 tab = 1;
-    if(expr)
-    {
-        PrintTabs(indent);
-        //printf("Expression:");
-        
-        switch(expr->type)
-        {
-            case Expression_Identifier: { 
-                printf("id.%s", expr->identifier);
-            }break; //variable
-            case Expression_StringLiteral: { 
-                printf("\"%s\"", expr->string_literal);
-            }break;
-            case Expression_CharLiteral: { 
-                printf("\'%c\'", expr->char_literal);
-            }break;
-            case Expression_Integer: { 
-                printf("%llu", expr->integer);
-            }break;
-            case Expression_RealNumber: { 
-                printf("%ff", (float)expr->real);
-            }break;
-            case Expression_Binary: { 
-                printf("(");
-                PrintExpression(expr->binary_left, indent);
-                printf(" ");
-                PrintBinaryOperator(expr->binary_type); 
-                printf(" ");
-                PrintExpression(expr->binary_right, indent);
-                printf(")");
-            }break;
-            case Expression_Unary: { 
-                if(expr->unary_type == Unary_PostDecrement ||
-                   expr->unary_type == Unary_PostIncrement)
-                {
-                    PrintExpression(expr->unary_expr, indent);
-                    PrintUnaryOperator(expr->unary_type);
-                }
-                else
-                {
-                    PrintUnaryOperator(expr->unary_type);
-                    PrintExpression(expr->unary_expr, indent);
-                }
-            }break;
-            case Expression_MemberAccess: { 
-                PrintExpression(expr->struct_expr, indent);
-                printf(".%s", expr->struct_member_identifier);
-            }break; 
-            case Expression_Ternary: { 
-                printf("(");
-                PrintExpression(expr->tern_cond, indent);
-                printf("?");
-                PrintExpression(expr->tern_true_expr, indent);
-                printf(":");
-                PrintExpression(expr->tern_false_expr, indent);
-                printf(")");
-            }break;
-            case Expression_Cast: { 
-                printf("cast(");
-                PrintTypeSpecifier(expr->casting_to);
-                printf(",");
-                PrintExpression(expr->cast_expression, indent);
-                printf(")");
-            }break;
-            case Expression_Call: { 
-                //printf("Call...\n");
-                PrintExpression(expr->call_expr, indent);
-                PrintExpression(expr->call_args, indent);
-            }break;
-            case Expression_ArraySubscript: { 
-                //printf("Array Index...\n");
-                PrintExpression(expr->array_expr, indent );
-                printf("[");
-                PrintExpression(expr->array_index_expr, indent);
-                printf("]");
-            }break;
-            case Expression_Compound: { 
-                printf("(");
-                expression *compound = expr;
-                while(compound->type == Expression_Compound)
-                {
-                    PrintExpression(compound->compound_expr, indent );
-                    printf(",");
-                    compound = compound->compound_next;
-                }
-                if(compound)
-                {
-                    printf(",");
-                    PrintExpression(compound, indent );
-                }
-                printf(")");
-            }break;
-            default: Panic();
-        }
-        
-    }
-}
-
-#undef CasePrint
-
-#if 0
-typedef enum
-{
-    ExpressionResult_Invalid,
-    ExpressionResult_Integer,
-    ExpressionResult_RealNumnber,
-    ExpressionResult_StringLiteral,
-    ExpressionResult_CharLiteral,
-}expression_result_type;
-
-typedef struct
-{
-    expression_result_type type;
-    union
-    {
-        u64 integer;
-        double real_number;
-        char *string;
-        char character;
-    }
-} expression_result;
-
-inline bool32
-IsExpressionResultNumerical(expression_result result)
-{
-    if(result.type == ExpressionResult_Integer ||
-       result.type == ExpressionResult_RealNumnber)
-        return true;
-    else return false;
-}
-#endif
-
-
 
 inline int
 ExpressionIsConstant(expression *expr)

@@ -1,0 +1,81 @@
+These are the basic types a user can define
+
+TypeSpec_Internal;
+TypeSpec_StructUnion; 
+TypeSpec_Enum; //and enum flags
+TypeSpec_Ptr;
+TypeSpec_Array;
+TypeSpec_Proc;
+
+Whenever the language attempts to parse a type it checks to see if that type has been
+"declared" yet. If the type hasn't been declared I still allocate a type for that 
+type, mark it as "undeclared" and resolve it later.
+
+Later when declaring the type (whenever AddType() is called...) I look for an undeclared type by that name and update it in accordance to how it's declared.
+
+This doens't rearrange the decls though, it just allows the parser to fixup the type later
+
+
+
+
+foo Foo; //foo needs to be added before Foo;
+int [sizeof(foo)]array;
+
+
+struct foo{
+
+int x, y;
+};
+
+
+So in brief this is what can be out of order;
+Types can be used before they are declared in DECLS
+Identifiers may be used before they're declared; This includes function calls in EXPRS
+
+I'm kind of using declaration_list as a namespace...is that what it is becoming into or is it a bit premature?
+
+So far the decl_list is behaving like a scope. It stores all declared decls in a scope. It is passed in to ParseStatement so when it generate a scope for a compound stmt it points to the *above scope when searching
+
+main(){
+
+	work_for_main();
+	i = 2;
+	int i;
+
+}
+
+work_for_main(){
+
+}
+
+=>
+
+work_for_main(){
+
+}
+
+main(){
+
+	work_for_main();
+	int i;
+	i = 2;
+}
+
+
+implementing something like
+while(WillEatTokenType(lexer, TokenType_Identifier)){
+	//...
+}
+else{
+	//...
+}
+isn't possible unless I preserve state for the first WillEat call
+since it will translate into if(WillEat) { while(WillEat){//...} } else{ //...}
+
+Expressions mostly found in statements but also within initializers for decls and
+integral values for arrays and stuff.
+
+Checking expressions requires to have a scope in case it is an identifier so we
+can find the decl for that identifier and see if it makes sense;
+
+We also need to check for name collision

@@ -9,15 +9,7 @@ typedef enum{
     TokenType_CharacterLiteral,
     
     TokenType_Integer,
-    TokenType_IntegerLong,
-    TokenType_IntegerLongLong,
-    
-    TokenType_UnsignedInteger,
-    TokenType_UnsignedIntegerLong,
-    TokenType_UnsignedIntegerLongLong,
-    
     TokenType_Float,
-    TokenType_Float64,
     
     //Operator tokens...
     TokenType_AsciiBegin = '!',
@@ -69,28 +61,28 @@ typedef enum
     Keyword_Union,
     Keyword_Enum,
     Keyword_EnumFlags,
+    Keyword_Include,
+    Keyword_Insert,
     Keyword_Typedef,
     Keyword_Sizeof,
     Keyword_Offsetof,
-    Keyword_Const,
+    Keyword_Let,
     Keyword_Goto,
     Keyword_Inline,
     Keyword_NoInline,
     Keyword_Internal,
     Keyword_External,
-    //Keyword_Static,
-    
-    
-    
-    
+    Keyword_Foreign,
+    Keyword_Define,
 } keyword_type;
 
 
 //TODO macronize this
 static char *global_keywords[] = {"___reserved___", "if", "then", "else",
     "while", "for", "break", "continue", "return", "defer",
-    "struct", "union", "enum", "enum_flags", "typedef", "sizeof", "offsetof",
-    "const", "goto", "inline", "no_inline", "internal", "external"};
+    "struct", "union", "enum", "enum_flags", "include", "insert",
+    "typedef", "sizeof", "offsetof",
+    "let", "goto", "inline", "no_inline", "internal", "external", "foreign", "define"};
 
 
 
@@ -102,8 +94,8 @@ typedef struct
         lexer_token_type type;
         char type_char;
     };
-    char *file;
-    u64 line;
+    char *file; //remove this
+    u64 line; //remove this
     union
     {
         char *identifier, *string,  character;
@@ -122,12 +114,13 @@ typedef struct
     u64 num_characters;
     //TODO
     char *file; //NOTE lexer parses contigious chars in memory, but I can annotate which file comes from which
-    char *past_file;
-    u64 past_line_at;
+    //char *past_file;
+    //u64 past_line_at;
     
     lexer_token eaten;
     lexer_token peek;
     lexer_token next;
+    
 }lexer_state;
 
 

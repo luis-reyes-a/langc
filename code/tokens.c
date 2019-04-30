@@ -310,7 +310,7 @@ EatToken(lexer_state *lexer)
                         else
                         {
                             decimal_number = true;
-                            result.type = TokenType_Float64;
+                            result.type = TokenType_Float;
                             result.floating = (float)result.integer;
                         }
                         
@@ -379,6 +379,12 @@ EatToken(lexer_state *lexer)
             {
                 result.type = TokenType_Identifier;
                 char *start = lexer->at;
+                
+                if(*lexer->at == 'h')
+                {
+                    u32 stop_here = 0;
+                    stop_here++;
+                }
                 u32 length = 0;
                 while(IsAlphaNumeric(*lexer->at) || *lexer->at == '_' || 
                       (lexer->at[0] == '-' && IsAlphaNumeric(lexer->at[1]))) 
@@ -441,7 +447,8 @@ PrintToken(lexer_token *token)
             case Keyword_Typedef: printf("typedef\n"); break;
             case Keyword_Sizeof: printf("sizeof\n"); break;
             case Keyword_Offsetof: printf("offsetof\n"); break;
-            case Keyword_Const: printf("const\n"); break;
+            //case Keyword_Const: printf("const\n"); break;
+            case Keyword_Let: printf("let\n"); break;
             case Keyword_Goto: printf("goto\n"); break;
             case Keyword_Inline: printf("inline\n"); break;
             case Keyword_NoInline: printf("no_inline\n"); break;
@@ -465,9 +472,7 @@ PrintToken(lexer_token *token)
         case TokenType_CharacterLiteral: 
         printf("Char Literal:%c\n", token->character);
         break;
-        case TokenType_Integer: case TokenType_IntegerLong: case TokenType_IntegerLongLong:  
-        case TokenType_UnsignedInteger: case TokenType_UnsignedIntegerLong: 
-        case TokenType_UnsignedIntegerLongLong:
+        case TokenType_Integer: 
         printf("Integer:%d\n", (int)token->integer);
         break;
         case TokenType_Float:  
@@ -547,61 +552,63 @@ PrintToken(lexer_token *token)
 }
 
 
-internal lexer_token_type //NOTE why don't I just return a bool, I know the type i passed it in
+internal int
 WillEatTokenType(lexer_state *lexer, lexer_token_type type)
 {
     Assert(type != TokenType_Invalid);
     if(PeekToken(lexer).type == type)
     {
         EatToken(lexer);
-        return type;
+        return true;
     }
-    else return TokenType_Invalid;
+    else return false;
 }
 
-internal keyword_type
+
+internal int
 WillEatKeyword(lexer_state *lexer, keyword_type keyword)
 {
-    Assert(keyword != TokenType_Invalid);
+    Assert(keyword != Keyword_Invalid);
     if(PeekToken(lexer).type == TokenType_Keyword &&
-       PeekToken(lexer).keyword == keyword)
+       lexer->peek.keyword == keyword)
     {
         EatToken(lexer);
-        return keyword;
+        return true;
     }
-    else return Keyword_Invalid;
+    else return false;
 }
 
 internal void
 ExpectToken(lexer_state *lexer, lexer_token_type type)
 {
-    if(!WillEatTokenType(lexer, type))   Panic(); //TODO syntax error
+    if(!WillEatTokenType(lexer, type))
+    {
+        SyntaxError(lexer->file, lexer->line_at, "Was expecting token %c", (char)type);
+    }
 }
 
 internal void
 ExpectKeyword(lexer_state *lexer, keyword_type keyword)
 {
-    if(!WillEatKeyword(lexer, keyword))   Panic();//TODO syntax error
+    if(!WillEatKeyword(lexer, keyword))
+    {
+        SyntaxError(lexer->file, lexer->line_at, "Was expecting keyword %s", global_keywords[keyword]);
+    }
 }
 
 internal char *
 ExpectIdentifier(lexer_state *lexer)
 {
-    lexer_token token = EatToken(lexer);
     char *identifier = 0;
-    if(token.type == TokenType_Identifier)
+    if(WillEatTokenType(lexer, TokenType_Identifier))
     {
-        identifier = token.identifier;
+        identifier = lexer->eaten.identifier;
+        Assert(identifier);
     }
-    if(!identifier)
-        SyntaxError(token.file, token.line, "Expected an identifier");
+    else
+    {
+        SyntaxError(lexer->file, lexer->line_at, "Was expecting an identifier");
+    }
     return identifier;
 }
 
-inline bool32
-TokenTypeInteger(lexer_token *token)
-{
-    if(token->type >= TokenType_Integer && token->type <= TokenType_UnsignedIntegerLongLong)
-        return true;
-    else return false;
-}

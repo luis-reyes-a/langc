@@ -1,5 +1,7 @@
 #include "type_checker.h"
 
+
+//Finds structs\unions\enums
 internal type_specifier *
 FindBasicType(char *identifier)
 {
@@ -7,7 +9,10 @@ FindBasicType(char *identifier)
     for(u32 i = 0; i < type_table.num_types; ++i)
     {
         type_specifier *typespec = type_table.types + i;
-        if(typespec->type != TypeSpec_Ptr && typespec->type != TypeSpec_Array)
+        if(typespec->type == TypeSpec_Internal ||
+           typespec->type == TypeSpec_StructUnion ||
+           typespec->type == TypeSpec_Enum ||
+           typespec->type == TypeSpec_UnDeclared)
         {
             if(typespec->identifier == identifier)
             {
@@ -42,6 +47,7 @@ FindArrayType(type_specifier *type, u64 array_size)
     type_specifier *result = 0;
     for(u32 i = 0; i < type_table.num_types; ++i)
     {
+        //NOTE the base type is not used here at all! Do I really need it?
         type_specifier *typespec = type_table.types + i;
         if(typespec->type == TypeSpec_Array && typespec->array_type == type)
         {
@@ -57,11 +63,13 @@ FindArrayType(type_specifier *type, u64 array_size)
 inline type_specifier *
 NewTypeTableEntry()
 {
+    type_specifier *result = 0;
     if(type_table.num_types < ArrayCount(type_table.types))
     {
-        return type_table.types + type_table.num_types++;
-    }
-    else return 0;
+        result = type_table.types + type_table.num_types++;
+        *result = (type_specifier){0};
+    } else Panic();
+    return result;
 }
 
 inline type_specifier *
@@ -74,23 +82,72 @@ AddInternalType(char *identifier, internal_typespec_type type)
     return typespec;
 }
 
-internal type_specifier *
-AddStructUnionType(char *identifier)
+inline type_specifier *
+AddUnDeclaredType(char *identifier)
 {
     type_specifier *typespec = NewTypeTableEntry();
-    typespec->type = TypeSpec_StructUnion;
-    typespec->identifier = identifier;
-    //typespec->user_decl = decl;
+    typespec->type = TypeSpec_UnDeclared;
+    typespec->undeclared_identifier = identifier;
     return typespec;
 }
 
+
+
 internal type_specifier *
-AddEnumType(char *identifier)
+AddNewStructUnionType(char *identifier, void *struct_decl)
 {
-    type_specifier *typespec = NewTypeTableEntry();
-    typespec->type = TypeSpec_Enum;
-    typespec->internal_identifier = identifier;
-    return typespec;
+    type_specifier *result = 0;
+    type_specifier *check = FindBasicType(identifier);
+    if(!check)
+    {
+        result = NewTypeTableEntry();
+        result->type = TypeSpec_StructUnion;
+        result->identifier = identifier;
+    }
+    else if(check->type == TypeSpec_UnDeclared)
+    {
+        
+        Assert(check->fixup->first_decl && !check->fixup->decl_after_decl);
+        check->fixup->decl_after_decl = struct_decl;
+        check->fixup = 0;
+        
+        check->type = TypeSpec_StructUnion;
+        check->identifier = identifier;
+        result = check;
+    }
+    else
+    {
+        Panic("Redefinition");
+    }
+    return result;
+}
+
+internal type_specifier *
+AddNewEnumType(char *identifier, void *enum_decl)
+{
+    type_specifier *result = 0;
+    type_specifier *check = FindBasicType(identifier);
+    if(!check)
+    {
+        result = NewTypeTableEntry();
+        result->type = TypeSpec_Enum;
+        result->identifier = identifier;
+    }
+    else if(check->type == TypeSpec_UnDeclared)
+    {
+        Assert(check->fixup->first_decl && !check->fixup->decl_after_decl);
+        check->fixup->decl_after_decl = enum_decl;
+        check->fixup = 0;
+        
+        check->type = TypeSpec_Enum;
+        check->identifier = identifier;
+        result = check;
+    }
+    else
+    {
+        Panic("Redefinition");
+    }
+    return result;
 }
 
 internal type_specifier *
@@ -114,6 +171,9 @@ AddArrayType(type_specifier *base, type_specifier *type, u64 size)
     typespec->array_base_type = base;
     typespec->array_type = type;
     typespec->array_size = size;
+    
+    //char *[4]strings;
+    
     return typespec;
 }
 
@@ -124,59 +184,5 @@ AddProcedureType(char *identifier)
     return 0;
 }
 
-internal void
-PrintTypeSpecifier(type_specifier *typespec)
-{
-    switch(typespec->type)
-    {
-        case TypeSpec_Internal: 
-        {
-            switch(typespec->internal_type)
-            {
-                case Internal_S8: printf("Internal_S8");break;
-                case Internal_S16: printf("Internal_S16");break;
-                case Internal_S32: printf("Internal_S32");break;
-                case Internal_S64: printf("Internal_S64");break;
-                case Internal_U8: printf("Internal_U8");break;
-                case Internal_U16: printf("Internal_U16");break;
-                case Internal_U32: printf("Internal_U32");break;
-                case Internal_U64: printf("Internal_U64");break;
-                case Internal_Float: printf("Internal_Float");break;
-                case Internal_Double: printf("Internal_Double");break;
-                default: Panic();
-            } 
-        }break;
-        
-        case TypeSpec_StructUnion: case TypeSpec_Enum: 
-        {
-            printf("%s", typespec->identifier);
-        }break;
-        
-        case TypeSpec_Ptr: 
-        {
-            printf("%s *%d", typespec->ptr_base_type->identifier, typespec->star_count);
-        }break;
-        
-        case TypeSpec_Array: 
-        { 
-            PrintTypeSpecifier(typespec->array_base_type);
-            printf("[%llu]", typespec->array_size);
-        }break;
-        
-        case TypeSpec_Proc: 
-        {
-            Panic(); //TODO
-        }break;
-        default: Panic();
-    }
-}
 
 
-internal void
-PrintTypeTable()
-{
-    for(u32 i = 0; i < type_table.num_types; ++i)
-    {
-        PrintTypeSpecifier(type_table.types + i);
-    }
-}

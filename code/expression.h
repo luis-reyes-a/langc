@@ -1,12 +1,5 @@
 #ifndef EXPRESSION_H
 #define EXPRESSION_H
-#include "ast.h"
-
-//constant expression is one that is an...
-//integer, literal, real number,
-
-//expression is not constant if it's a variable or adress of a variable
-//
 
 typedef enum
 {
@@ -47,10 +40,10 @@ typedef enum
 } expression_unary_type;
 
 typedef enum
-{
+{ 
     Binary_None = 0,
     Binary_Mod = '%',
-    Binary_Add = '+', 
+    Binary_Add = '+', //integers, floats, vars of those types, and pointers and array ids.
     Binary_Sub = '-',
     Binary_Mul = '*',
     Binary_Div = '/',
@@ -86,9 +79,13 @@ typedef enum
     
 } expression_binary_type;
 
+
+
 typedef struct expression
 {
     expression_type type;
+    char *file;
+    u64 line;
     union
     {
         struct

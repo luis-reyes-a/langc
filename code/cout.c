@@ -132,9 +132,34 @@ OutputInteger64(writeable_text_buffer *buffer, u64 integer)
     }
 }
 
+
 internal void
 OutputFloat64(writeable_text_buffer *buffer, double value)
 {
+    int is_negative = value < 0;
+    u64 whole_part = u64(value);
+    
+    
+    u32 decimal_place = 0;
+    double test_value = value;
+    double test_fractional = test_value - u64(test_value);
+    while(test_fractional)
+    {
+        ++decimal_place;
+        test_value *= 10;
+        //NOTE this can be wrong due to floating point imprecision!
+        test_fractional = test_value - (double)u64(test_value);
+    }
+    
+    u64 fractional_part = u64((value - whole_part) * pow(10, decimal_place));
+    
+    OutputInteger64(buffer, whole_part);
+    OutputChar(buffer, '.', 0);
+    OutputInteger64(buffer, fractional_part);
+    
+    
+    
+    
     
 }
 
@@ -157,6 +182,7 @@ OutputTypeSpecifier(writeable_text_buffer *buffer, type_specifier *typespec, cha
             case Internal_U64:     OutputCString(buffer, "uint64_t",0); break;
             case Internal_Float:   OutputCString(buffer, "float",0); break;
             case Internal_Double:  OutputCString(buffer, "double",0); break;
+            
             default: Panic();
         }
         break;
@@ -183,6 +209,7 @@ OutputTypeSpecifier(writeable_text_buffer *buffer, type_specifier *typespec, cha
         
         break;
         
+        case TypeSpec_UnDeclared:
         case TypeSpec_Proc:   
         Panic(); //TODO
         break;
@@ -192,6 +219,8 @@ OutputTypeSpecifier(writeable_text_buffer *buffer, type_specifier *typespec, cha
     WrapperSwitchClose(wrapper);
 }
 
+declaration_list *debug_decl_lookup_list = 0;
+
 internal void
 OutputExpression(writeable_text_buffer *buffer, expression *expr, char wrapper)
 {
@@ -200,6 +229,25 @@ OutputExpression(writeable_text_buffer *buffer, expression *expr, char wrapper)
     {
         case Expression_Identifier:   
         OutputCString(buffer, expr->identifier, 0);
+        
+#if 0
+        if(debug_decl_lookup_list)
+        {
+            OutputCString(buffer, "/*", 0);
+            declaration *decl = FindDeclaration(debug_decl_lookup_list, expr->identifier);
+            if(decl)
+            {
+                OutputDeclC(buffer, decl);
+            }
+            else
+            {
+                Panic("Identifier not declared!");
+            }
+            
+            OutputCString(buffer, "*/", 0);
+        }
+#endif
+        
         break; 
         
         case Expression_StringLiteral:   
@@ -411,9 +459,6 @@ OutputExpression(writeable_text_buffer *buffer, expression *expr, char wrapper)
 }
 
 
-
-
-
 internal void
 OutputStatement(writeable_text_buffer *buffer, statement *stmt, char wrapper)
 {
@@ -421,11 +466,13 @@ OutputStatement(writeable_text_buffer *buffer, statement *stmt, char wrapper)
     switch(stmt->type)
     {
         case Statement_Declaration: 
-        for(declaration *decl = stmt->decl;
-            decl;
-            decl = decl->next)
+        
+        //NOTE since I'm storing an 'ast' per compound statement I will just print out 1
+        //for(declaration *decl = stmt->decl;
+        //decl;
+        //decl = decl->next)
         {
-            OutputDeclC(buffer, decl);
+            OutputDeclC(buffer, stmt->decl);
         }
         break;
         
@@ -436,26 +483,27 @@ OutputStatement(writeable_text_buffer *buffer, statement *stmt, char wrapper)
         
         case Statement_If:  
         OutputCString(buffer, "if", 0);
-        OutputExpression(buffer, stmt->if_expr, '(');
-        OutputStatement(buffer, stmt->if_stmt, 0);
+        OutputExpression(buffer, stmt->cond_expr, '(');
+        OutputStatement(buffer, stmt->cond_stmt, 0);
         break;
         
         case Statement_Else:  
         OutputCString(buffer, "else", 0);
-        OutputStatement(buffer, stmt->else_stmt, 0);
+        OutputStatement(buffer, stmt->cond_stmt, 0);
         break;
         
         case Statement_Switch:  
         OutputCString(buffer, "switch", 0);
-        OutputExpression(buffer, stmt->switch_expr, '(');
-        OutputStatement(buffer, stmt->switch_cases, 0);
+        OutputExpression(buffer, stmt->cond_expr, '('); 
+        OutputStatement(buffer, stmt->cond_stmt, 0);
         break; 
         
         case Statement_SwitchCase:  
-        if(stmt->case_label, 0)
+        if(stmt->cond_expr)
         {
             OutputCString(buffer, "case ", 0);
-            OutputExpression(buffer, stmt->case_label, '(');
+            Assert(stmt->cond_expr_as_const);
+            OutputExpression(buffer, stmt->cond_expr_as_const, '(');
         }
         else
         {
@@ -463,14 +511,14 @@ OutputStatement(writeable_text_buffer *buffer, statement *stmt, char wrapper)
         }
         
         OutputChar(buffer, ':', 0);
-        OutputStatement(buffer, stmt->case_statement, 0);
+        OutputStatement(buffer, stmt->cond_stmt, 0);
         OutputCString(buffer, "break;\n", 0);
         break; 
         
         case Statement_While:  
         OutputCString(buffer, "while", 0);
-        OutputExpression(buffer, stmt->while_expr, '(');
-        OutputStatement(buffer, stmt->while_stmt, 0);
+        OutputExpression(buffer, stmt->cond_expr, '(');
+        OutputStatement(buffer, stmt->cond_stmt, 0);
         break;
         
         case Statement_For:  
@@ -488,9 +536,6 @@ OutputStatement(writeable_text_buffer *buffer, statement *stmt, char wrapper)
         OutputStatement(buffer, stmt->defer_stmt, 0);
         break;
         
-        case Statement_Goto:  
-        Panic();
-        break;
         
         case Statement_Break:  
         OutputCString(buffer, "break;\n", 0);
@@ -502,20 +547,60 @@ OutputStatement(writeable_text_buffer *buffer, statement *stmt, char wrapper)
         
         case Statement_Return:  
         OutputCString(buffer, "return ", 0);
-        OutputExpression(buffer, stmt->return_expr, 0);
+        if(stmt->expr)
+        {
+            OutputExpression(buffer, stmt->expr, 0);
+        }
         OutputCString(buffer, ";\n", 0);
         break;
         
         case Statement_Compound:  
         {
+            //NOTE debug!
+            declaration_list *last_lookup = debug_decl_lookup_list;
+            debug_decl_lookup_list = &stmt->decl_list;
+            
             OutputCString(buffer, "{\n", 0);
             for(statement *inner = stmt->compound_stmts;
                 inner;
                 inner = inner->next)
             {
                 OutputStatement(buffer, inner, 0);
+                
             }
+            
+            debug_decl_lookup_list = last_lookup;
             OutputCString(buffer, "}\n", 0);
+            
+#if 0
+            if(stmt->decl_list)
+            {
+                OutputCString(buffer, "/*\n", 0);
+                for(declaration_list_entry *entry = stmt->decl_list;
+                    entry;
+                    entry= entry->next)
+                {
+                    Assert(entry->decl);
+                    for(declaration *decl = entry->decl;
+                        decl;
+                        decl = decl->next)
+                    {
+                        OutputDeclC(buffer, decl);
+                    }
+                    
+                }
+                OutputCString(buffer, "*/\n", 0);
+            }
+#else
+            OutputCString(buffer, "/*\n", 0);
+            for(declaration *decl = stmt->decl_list.decls;
+                decl;
+                decl = decl->next)
+            {
+                OutputDeclC(buffer, decl);
+            }
+            OutputCString(buffer, "*/\n", 0);
+#endif
         }
         
         break;
@@ -592,6 +677,30 @@ OutputDeclC(writeable_text_buffer *buffer, declaration *decl)
         }
         break;
         
+        case Declaration_Constant:
+        {
+            OutputCString(buffer, "#define ", 0);
+            OutputCString(buffer, decl->identifier, ' ');
+            //NOTE output actual expression in parens and let C take care of it?
+            OutputExpression(buffer, decl->expr_as_const, 0);
+            OutputChar(buffer, '\n', 0);
+        }break;
+        
+        case Declaration_Include:
+        {
+            OutputCString(buffer, "#include ", 0);
+            //OutputCString(buffer, decl->identifier, 0);
+            OutputExpression(buffer, decl->expr_as_const, 0);
+            OutputChar(buffer, '\n', 0);
+            //else TODO 
+        }break;
+        
+        case Declaration_Insert:
+        {
+            Panic(); //TODO fix this up, just slap code in for now!
+        }break;
+        
+        
         case Declaration_Typedef:   
         Panic();
         //TODO can you typedef arrays?
@@ -647,10 +756,10 @@ OutputDeclC(writeable_text_buffer *buffer, declaration *decl)
         
         case Declaration_EnumMember:   
         OutputCString(buffer, decl->identifier, 0);
-        if(decl->const_expr)
+        if(decl->expr_as_const)
         {
             OutputCString(buffer, " = ", 0);
-            OutputExpression(buffer, decl->const_expr, 0);
+            OutputExpression(buffer, decl->expr_as_const, 0);
         }
         OutputCString(buffer, ",\n", 0);
         break;
