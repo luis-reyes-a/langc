@@ -171,7 +171,8 @@ ParseConstant(lexer_state *lexer, int skip_keyword)
         }
         else
         {
-            SyntaxError(lexer->file, lexer->line_at, "Constants must be constant!");
+            after_parse_fixup *fixup = NewFixup(Fixup_DeclNeedsConstExpression);
+            fixup->decl = result;
         }
     }
     
@@ -195,27 +196,63 @@ ParseConstant(lexer_state *lexer, int skip_keyword)
 }
 
 internal declaration *
-ParseProcedure(lexer_state *lexer, u32 qualifier, declaration_list *scope)
+FindDeclaration(declaration_list *list, char *identifier)
 {
     declaration *result = 0;
-    
-    if(WillEatTokenType(lexer, TokenType_Keyword))
+    Assert(list && identifier);
+    for(declaration *decl = list->decls;
+        decl;
+        decl = decl->next)
+    {
+        if(decl->identifier == identifier)
+        {
+            result = decl;
+            break;
+        }
+    }
+    if(!result && list->above)
+    {
+        result = FindDeclaration(list->above, identifier);
+    }
+    return result;
+}
+
+inline declaration *
+FindProcedureHeader(declaration_list *list, char *identifier)
+{
+    declaration *result = FindDeclaration(list, identifier);
+    if(result)
+    {
+        Assert(result->type == Declaration_Procedure);
+    }
+    return result;
+}
+
+internal declaration *
+ParseLocalProcedure(lexer_state *lexer, declaration_list *scope_declared_in)
+{
+    declaration *result = 0;
+    ExpectToken(lexer, TokenType_Keyword);
+    if(lexer->eaten.keyword == Keyword_Internal || lexer->eaten.keyword == Keyword_External ||
+       lexer->eaten.keyword == Keyword_Inline || lexer->eaten.keyword == Keyword_NoInline)
     {
         result = NewDeclaration(Declaration_Procedure);
         result->proc_keyword = lexer->eaten.keyword;
-        Assert(result->proc_keyword == Keyword_Internal ||
-               result->proc_keyword == Keyword_External ||
-               result->proc_keyword == Keyword_Inline ||
-               result->proc_keyword == Keyword_NoInline);
         result->proc_return_type = ParseTypeSpecifier(lexer, 0);
         result->identifier = ExpectIdentifier(lexer);
         ExpectToken(lexer, '(');
-        result->proc_args = ParseVariable(lexer, 0, Declaration_ProcedureArgs);
+        declaration *args = ParseVariable(lexer, 0, Declaration_ProcedureArgs);
         ExpectToken(lexer, ')');
-        result->proc_body = ParseStatement(lexer, scope, result);
         
-        for(declaration *arg = result->proc_args;
-            arg;
+        result->proc_body = NewStatement(Statement_Compound);
+        DeclarationListAppend(&result->proc_body->decl_list, args);
+        
+        //we used to pass in result but we need to pass in the header function
+        //TODO think about this
+        ParseCompoundStatement(lexer, result->proc_body, scope_declared_in, result);
+        
+        for(declaration *arg = PROC_ARGS(result);
+            arg && arg->type == Declaration_ProcedureArgs;
             arg = arg->next)
         {
             if(arg->initializer)
@@ -225,14 +262,49 @@ ParseProcedure(lexer_state *lexer, u32 qualifier, declaration_list *scope)
                 break;
             }
         }
-        
-        //
     }
-    else
-    {
-        SyntaxError(lexer->file, lexer->line_at, "Unknown proc return type");
-    }
+    else Panic();
     return result;
+}
+
+
+internal void
+ParseTopLevelProcedure(lexer_state *lexer, declaration_list *scope)
+{
+    //Assert(scope->above == 0);
+    declaration *result = 0;
+    
+    if(PeekToken(lexer).type == TokenType_Keyword)
+    {
+        u32 keyword = lexer->peek.keyword;
+        if(keyword == Keyword_Internal || keyword == Keyword_External ||
+           keyword == Keyword_Inline || keyword == Keyword_NoInline)
+        {
+            declaration *proc = ParseLocalProcedure(lexer, scope);
+            declaration *header = FindProcedureHeader(scope, proc->identifier);
+            if(!header)
+            {
+                header = NewDeclaration(Declaration_ProcedureHeader);
+                header->identifier = ConcatCStringsIntern(proc->identifier,"__Header");
+                header->overloaded_list = proc;
+                header->last_overloaded_list = proc;
+                
+                DeclarationListAppend(scope, header);
+                
+                after_parse_fixup *fixup = NewFixup(Fixup_AppendAllOverloadedProceduresToEnd);
+                fixup->decl = header;
+            }
+            else
+            {
+                Assert(header->last_overloaded_list);
+                header->last_overloaded_list->next = proc;
+                Assert(!proc->next);
+                header->last_overloaded_list = proc;
+            }
+        }
+        else Panic();
+    }
+    else Panic();
 }
 
 internal declaration *
@@ -261,10 +333,14 @@ ParseInclude(lexer_state *lexer, keyword_type keyword)
         {
             result->expr_as_const = NewExpression(0);
             *result->expr_as_const = cexpr;
+            Assert(result->expr_as_const->type == Expression_StringLiteral);
+            result->identifier = result->expr_as_const->string_literal;
         }
         else
         {
-            SyntaxError(lexer->file, lexer->line_at, "Include expr must be constant!");
+            Panic();
+            after_parse_fixup *fixup = NewFixup(Fixup_DeclNeedsConstExpression);
+            fixup->decl = result;
         }
         
         declaration **next = &result->next;
@@ -287,8 +363,9 @@ ParseInclude(lexer_state *lexer, keyword_type keyword)
 }
 
 
+
 internal declaration * //NOTE doesn't move pass the comma!
-ParseEnumMember(lexer_state *lexer, declaration *last_enum_member, int enum_flags)
+ParseEnumMember(lexer_state *lexer, declaration *last_enum_member, int enum_flags, after_parse_fixup **fixup)
 {
     declaration *result = 0;
     if(WillEatTokenType(lexer, TokenType_Identifier))
@@ -306,7 +383,10 @@ ParseEnumMember(lexer_state *lexer, declaration *last_enum_member, int enum_flag
             }
             else
             {
-                SyntaxError(lexer->file, lexer->line_at, "Member initializer not constant!");
+                if(!*fixup)
+                {
+                    *fixup = NewFixup(Fixup_EnumListNeedsConstExpressions);
+                }
             }
             
         }
@@ -314,19 +394,29 @@ ParseEnumMember(lexer_state *lexer, declaration *last_enum_member, int enum_flag
         {
             if(last_enum_member)
             {
-                Assert(last_enum_member->expr_as_const->type == Expression_Integer);
-                if(enum_flags)
+                if(last_enum_member->expr_as_const)
                 {
-                    //TODO check value is a power of 2
-                    result->actual_expr = NewExpressionInteger(last_enum_member->expr_as_const->integer << 1);
-                    result->expr_as_const = result->actual_expr;
+                    Assert(last_enum_member->expr_as_const->type == Expression_Integer);
+                    if(enum_flags)
+                    {
+                        //TODO check value is a power of 2
+                        result->actual_expr = NewExpressionInteger(last_enum_member->expr_as_const->integer << 1);
+                        result->expr_as_const = result->actual_expr;
+                    }
+                    else
+                    {
+                        result->actual_expr = NewExpressionInteger(last_enum_member->expr_as_const->integer + 1);
+                        result->expr_as_const = result->actual_expr;
+                    }
                 }
                 else
-                {
-                    result->actual_expr = NewExpressionInteger(last_enum_member->expr_as_const->integer + 1);
-                    result->expr_as_const = result->actual_expr;
+                { 
+                    Panic("We should never get here");
+                    if(!*fixup)
+                    {
+                        *fixup = NewFixup(Fixup_EnumListNeedsConstExpressions);
+                    }
                 }
-                
             }
             else
             {
@@ -356,6 +446,7 @@ internal declaration *
 ParseEnum(lexer_state *lexer, declaration_list *scope)
 {
     declaration *result = 0;
+    after_parse_fixup *fixup = 0;
     
     ExpectKeyword(lexer, Keyword_Enum);
     if(WillEatTokenType(lexer, TokenType_Identifier))
@@ -371,16 +462,22 @@ ParseEnum(lexer_state *lexer, declaration_list *scope)
         SyntaxError(lexer->file, lexer->line_at, "Untyped enum!");
     }
     ExpectToken(lexer, '{');
-    DeclarationListAppend(&result->list, ParseEnumMember(lexer, 0, false));
+    DeclarationListAppend(&result->list, ParseEnumMember(lexer, 0, false, &fixup));
     //declaration *current = result->members;
     while(WillEatTokenType(lexer, ';') &&
           PeekToken(lexer).type != '}')
     {
         DeclarationListAppend(&result->list, 
-                              ParseEnumMember(lexer, result->list.decls->back, false));
+                              ParseEnumMember(lexer, result->list.decls->back, false, &fixup));
         //current = current->next;
     }
     ExpectToken(lexer, '}');
+    
+    if(fixup)
+    {
+        Assert(fixup->type == Fixup_EnumListNeedsConstExpressions);
+        fixup->decl = result;
+    }
     return result;
 }
 
@@ -388,6 +485,7 @@ internal declaration *
 ParseEnumFlags(lexer_state *lexer, declaration_list *scope)
 {
     declaration *result = 0;
+    after_parse_fixup *fixup = 0;
     ExpectKeyword(lexer, Keyword_EnumFlags);
     if(WillEatTokenType(lexer, TokenType_Identifier))
     {
@@ -397,14 +495,14 @@ ParseEnumFlags(lexer_state *lexer, declaration_list *scope)
         AddNewEnumType(result->identifier, result);
         
         ExpectToken(lexer, '{');
-        DeclarationListAppend(&result->list, ParseEnumMember(lexer, 0, true));
+        DeclarationListAppend(&result->list, ParseEnumMember(lexer, 0, true, &fixup));
         if(result->list.decls)
         {
             //declaration *current = result->members;
             while(WillEatTokenType(lexer, ';') &&
                   PeekToken(lexer).type != '}')
             {
-                DeclarationListAppend(&result->list, ParseEnumMember(lexer, result->list.decls->back, true));
+                DeclarationListAppend(&result->list, ParseEnumMember(lexer, result->list.decls->back, true, &fixup));
             }
         }
         else
@@ -418,6 +516,11 @@ ParseEnumFlags(lexer_state *lexer, declaration_list *scope)
     {
         //TODO allow untyped enums?
         SyntaxError(lexer->file, lexer->line_at, "Untyped enum flags!");
+    }
+    if(fixup)
+    {
+        Assert(fixup->type == Fixup_EnumListNeedsConstExpressions);
+        fixup->decl = result;
     }
     return result;
 }
@@ -520,8 +623,8 @@ ParseVariable(lexer_state *lexer, type_specifier *type, declaration_type decl_ty
     
     if(fixup)
     {
-        fixup->first_decl = result;
-        fixup->decl_after_decl = 0; 
+        fixup->decl = result;
+        fixup->decl2 = 0; 
     }
     return result;
 }
@@ -554,7 +657,7 @@ ParseStructMember(lexer_state *lexer, declaration *struct_decl)
         member = ParseVariable(lexer, 0, Declaration_Variable);
         if(member->typespec->type == TypeSpec_UnDeclared)
         {
-            member->typespec->fixup->first_decl = struct_decl;
+            member->typespec->fixup->decl = struct_decl;
         }
     }
     else
@@ -596,6 +699,8 @@ StructNeedsConstructor(declaration *decl)
 
 //do I still need the list
 //NOTE the list is only for functions that need pointer to global decls
+
+
 
 internal declaration *
 ParseStructUnion(lexer_state *lexer, declaration_list *scope)
@@ -641,7 +746,7 @@ ParseStructUnion(lexer_state *lexer, declaration_list *scope)
         {
             //return if all set to zero so that 
             after_parse_fixup *fixup = NewFixup(Fixup_StructNeedsConstructor);
-            fixup->struct_with_no_constructor = result;
+            fixup->decl = result;
 #if 1
             Assert(this_type);
             {
@@ -715,7 +820,8 @@ ParseForeignDeclaration(lexer_state *lexer)
             result->identifier = identifier;
             result->proc_keyword = Keyword_Internal;
             result->proc_body = 0;
-            result->proc_args = ParseVariable(lexer, 0, Declaration_ProcedureArgs);
+            result->proc_body = NewStatement(Statement_Compound);
+            DeclarationListAppend(&result->proc_body->decl_list, ParseVariable(lexer, 0, Declaration_ProcedureArgs));
             ExpectToken(lexer, ')');
         }
         else
@@ -782,7 +888,8 @@ ParseDeclaration(lexer_state *lexer, declaration_list *scope)
             break;
             case Keyword_Internal: case Keyword_External:
             case Keyword_Inline: case Keyword_NoInline:
-            result = ParseProcedure(lexer, token.keyword, scope);
+            result = (declaration*)1; //TODO THIS WILL PROB CAUSE PROBS
+            ParseTopLevelProcedure(lexer, scope);
             break;
             default: Panic();
         }

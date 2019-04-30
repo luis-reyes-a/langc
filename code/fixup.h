@@ -9,11 +9,16 @@
 typedef enum
 {
     Fixup_None,
-    Fixup_DeclBeforeDecl,
-    Fixup_DeclBeforeStmt,
-    Fixup_StructNeedsConstructor,
-    Fixup_VarMayNeedConstructor,
-    Fixup_ProcedureOptionalArgs,
+    Fixup_DeclBeforeIdentifier,
+    Fixup_DeclBeforeDecl, //move decl2 before decl
+    Fixup_DeclBeforeStmt, //move decl2 before stmt
+    Fixup_StructNeedsConstructor, //make constructor for decl
+    Fixup_VarMayNeedConstructor,  //set initializer to constructor for decl
+    Fixup_ProcedureOptionalArgs,  //remove optional args, embed in decl->proc_body
+    Fixup_ExprNeedsConstExpression, //resolve expression to const expr, couldn't before
+    Fixup_DeclNeedsConstExpression, //resolve expression to const expr, couldn't before
+    Fixup_EnumListNeedsConstExpressions, //enum initializer wasn't resolved before, fix now to const expr
+    Fixup_AppendAllOverloadedProceduresToEnd, //
 } after_parse_fixup_type;
 
 
@@ -23,21 +28,23 @@ typedef struct
     after_parse_fixup_type type;
     union
     {
-        struct 
-        {
-            union {declaration *first_decl, *decl;};
-            declaration *decl_after_decl;
-        };
+        declaration *decl;
+        statement *stmt;
+        expression *expr;
+        char *identifier;
         struct
         {
-            declaration *first_statement;
-            statement *decl_after_stmt;
-        };
-        struct
-        {
-            declaration *struct_with_no_constructor;
+            void *_ignored_;
+            union
+            {
+                declaration *decl2;
+                statement *stmt2;
+                expression *expr2;
+            };
         };
     };
+    
+    
 } after_parse_fixup;
 
 struct

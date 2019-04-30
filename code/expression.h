@@ -137,7 +137,8 @@ typedef struct expression
         struct //array
         {
             struct expression *array_expr; //
-            struct expression *array_index_expr;
+            struct expression *array_actual_index_expr;
+            struct expression *array_index_expr_as_const;
         };
         struct //cast
         {

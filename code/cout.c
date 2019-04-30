@@ -445,7 +445,7 @@ OutputExpression(writeable_text_buffer *buffer, expression *expr, char wrapper)
         
         case Expression_ArraySubscript:   
         OutputExpression(buffer, expr->array_expr, 0);
-        OutputExpression(buffer, expr->array_index_expr, '[');
+        OutputExpression(buffer, expr->array_actual_index_expr, '[');
         break; 
         
         
@@ -778,8 +778,8 @@ OutputDeclC(writeable_text_buffer *buffer, declaration *decl)
         OutputChar(buffer, '\n', 0);
         OutputCString(buffer, decl->identifier, 0); //TODO function_overloading!!!
         OutputChar(buffer, '(', 0);
-        for(declaration *arg = decl->proc_args;
-            arg;
+        for(declaration *arg = decl->proc_body->decl_list.decls;
+            arg && arg->type == Declaration_ProcedureArgs;
             arg = arg->next)
         {
             Assert(arg->type == Declaration_ProcedureArgs);

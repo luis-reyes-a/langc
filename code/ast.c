@@ -85,7 +85,27 @@ FixupEnumFlags(declaration *enum_flags)
     //why not just store this as an enum throughout?
 }
 
-
+internal void
+InsertSecondDeclBeforeFirst(declaration *first, declaration *second)
+{
+    declaration *prev_back = first->back;
+    first->back = second;
+    second->back = prev_back;
+    if(prev_back->next) //in case of it being last decl in entire ast!
+    {
+        //NOTE if prev_back is first in entire list, it's back pointer has to be changed
+        //in case the last decl in the list is changed!
+        prev_back->next = second;
+    }
+    
+    declaration *rest_decls = second->next;
+    second->next = first;
+    first->next = rest_decls;
+    if(rest_decls) //in case of last one in list
+    {
+        rest_decls->back = first;
+    }
+}
 
 
 internal void
@@ -97,32 +117,18 @@ AstFixupC(declaration_list *ast)//TODO
         after_parse_fixup *fixup = fixup_table.fixups + i;
         if(fixup->type == Fixup_DeclBeforeDecl)
         {
-            //NOTE I can probably pull this out into a safe function!
-            
-            declaration *prev_back = fixup->first_decl->back;
-            fixup->first_decl->back = fixup->decl_after_decl;
-            fixup->decl_after_decl->back = prev_back;
-            if(prev_back->next) //in case of it being last decl in entire ast!
-            {
-                prev_back->next = fixup->decl_after_decl;
-            }
-            
-            
-            
-            declaration *rest_decls = fixup->decl_after_decl->next;
-            fixup->decl_after_decl->next = fixup->first_decl;
-            fixup->first_decl->next = rest_decls;
-            if(rest_decls) //in case of last one in list
-            {
-                rest_decls->back = fixup->first_decl;
-            }
-            
-            
+            InsertSecondDeclBeforeFirst(fixup->decl, fixup->decl2);
+        }
+        else if(fixup->type == Fixup_DeclBeforeIdentifier)
+        {
+            declaration *decl = FindDeclaration(ast, fixup->identifier);
+            Assert(decl);
+            InsertSecondDeclBeforeFirst(decl, fixup->decl2);
         }
         else if (fixup->type == Fixup_StructNeedsConstructor)
         {
-            Assert(fixup->struct_with_no_constructor);
-            declaration *dstruct = fixup->struct_with_no_constructor;
+            Assert(fixup->decl);
+            declaration *dstruct = fixup->decl;
             declaration *constructor = NewDeclaration(Declaration_Procedure);
             constructor->identifier = ConcatCStringsIntern(dstruct->identifier, "__Constructor");
             constructor->proc_keyword = Keyword_Inline;
@@ -221,8 +227,8 @@ AstFixupC(declaration_list *ast)//TODO
             statement opts = {0};
             opts.type = Statement_Compound;
             Assert(body->compound_stmts);
-            for(declaration *arg = fixup->decl->proc_args;
-                arg;
+            for(declaration *arg = PROC_ARGS(fixup->decl);
+                arg && arg->type == Declaration_ProcedureArgs;
                 arg = arg->next)
             {
                 Assert(arg->type == Declaration_ProcedureArgs);
@@ -246,69 +252,62 @@ AstFixupC(declaration_list *ast)//TODO
                 opts.compound_tail->next = rest_body;
             }
         }
+        else if(fixup->type == Fixup_EnumListNeedsConstExpressions)
+        {
+            Assert(fixup->decl->type == Declaration_Enum ||
+                   fixup->decl->type == Declaration_EnumFlags);
+            declaration *prev = fixup->decl->members;
+            for(declaration *member = fixup->decl->members;
+                member;
+                prev = member, member = member->next)
+            {
+                if(!member->expr_as_const)
+                {
+                    if(member->actual_expr)
+                    {
+                        expression cexpr = ResolvedExpression(member->actual_expr);
+                        if(cexpr.type)
+                        {
+                            member->expr_as_const = NewExpression(0);
+                            *member->expr_as_const = cexpr;
+                        }
+                        else Panic();
+                    }
+                    else
+                    {
+                        Assert(prev != member && prev->expr_as_const);
+                        Assert(prev->expr_as_const->type == Expression_Integer);
+                        if(fixup->decl->type == Declaration_Enum)
+                        {
+                            member->expr_as_const = NewExpressionInteger(prev->expr_as_const->integer + 1);
+                            member->actual_expr = member->expr_as_const;
+                        }
+                        else
+                        {
+                            member->expr_as_const = NewExpressionInteger(prev->expr_as_const->integer << 1);
+                            member->actual_expr = member->expr_as_const;
+                        }
+                    }
+                }
+            }
+        }
+        else if (fixup->type == Fixup_AppendAllOverloadedProceduresToEnd)
+        {
+            declaration *header = fixup->decl;
+            Assert(header->type == Declaration_ProcedureHeader);
+            for(declaration *proc = header->overloaded_list;
+                proc;
+                proc = proc->next)
+            {
+                Assert(proc->type == Declaration_Procedure);
+                DeclarationListAppend(ast, proc);
+            }
+        }
         else
         {
             Panic();
         }
     }
-    
-    
-    
-    
-#if 0
-    for(declaration *decl = ast->decls;
-        decl;
-        decl = decl->next)
-    {
-        switch(decl->type)
-        {
-            case Declaration_Struct: case Declaration_Union:
-            declaration *new_nodes = FixupStructUnion(decl);
-            if(new_nodes)
-            {
-                declaration *remaining = decl->next;
-                decl->next = new_nodes;
-                new_nodes->next = remaining;
-                decl = new_nodes; //NOTE run this through again?
-            }
-            break;
-            
-            case Declaration_Variable:
-            FixupVariable(decl);
-            break;
-            
-            case Declaration_Procedure:
-            FixupProcedure(decl);
-            if(decl->proc_body->type == Statement_Compound)
-            {
-                AstFixupC(&decl->proc_body->decl_list);
-            }
-            
-            //TODO what about single line statements?
-#if 0
-            for(stmt = ;
-                stmt;
-                stmt = stmt->next)
-            {
-                if(stmt->type == Statement_Declaration)
-                {
-                    AstFixupC(stmt->decl);
-                }
-            }
-            if(stmt && stmt->type == Statement_Declaration)
-                AstFixupC(stmt->decl);
-#endif
-            
-            break;
-            
-            case Declaration_EnumFlags:
-            FixupEnumFlags(decl);
-            break;
-            
-            
-        }
-    }
-#endif
 }
 
 internal void PrintDeclaration(declaration *decl, u32 indent);
@@ -511,7 +510,7 @@ PrintExpression(expression *expr)
                 //printf("Array Index...\n");
                 PrintExpression(expr->array_expr);
                 printf("[");
-                PrintExpression(expr->array_index_expr);
+                PrintExpression(expr->array_index_expr_as_const);
                 printf("]");
             }break;
             case Expression_Compound: { 
@@ -688,6 +687,26 @@ PrintDeclaration(declaration *decl,  u32 indent)
             }
         }break;
         
+        case Declaration_ProcedureHeader:
+        {
+            printf("proc_overload_header {\n");
+            Assert(decl->overloaded_list);
+            for(declaration *proc = decl->overloaded_list;
+                proc;
+                proc = proc->next)
+            {
+                Assert(proc->type == Declaration_Procedure);
+                PrintTabs(indent + 1);
+                if(proc->proc_keyword == Keyword_Inline)         printf("inline ");
+                else if(proc->proc_keyword == Keyword_NoInline)  printf("no_inline ");
+                else if(proc->proc_keyword == Keyword_Internal)  printf("internal ");
+                else if(proc->proc_keyword == Keyword_External)  printf("external ");
+                PrintTypeSpecifier(proc->proc_return_type);
+                printf(" %s;\n", proc->identifier);
+            }
+            printf("}\n");
+        }break;
+        
         case Declaration_Procedure: 
         if(decl->proc_keyword == Keyword_Inline)  printf("inline ");
         else if(decl->proc_keyword == Keyword_NoInline)  printf("no_inline ");
@@ -697,12 +716,12 @@ PrintDeclaration(declaration *decl,  u32 indent)
         printf("\n");
         PrintTabs(indent);
         printf("%s(", decl->identifier);
-        for(declaration *arg = decl->proc_args;
-            arg;
+        for(declaration *arg = PROC_ARGS(decl);
+            arg && arg->type == Declaration_ProcedureArgs;
             arg = arg->next)
         {
             PrintDeclaration(arg, 0);
-            if(arg->next)
+            if(arg->next && arg->next->type == Declaration_ProcedureArgs)
             {
                 printf(", ");
             }
@@ -725,6 +744,12 @@ PrintDeclaration(declaration *decl,  u32 indent)
         PrintExpression(decl->actual_expr);
         break; 
         
+        case Declaration_Constant:
+        printf("let %s = ", decl->identifier);
+        PrintExpression(decl->expr_as_const);
+        printf(";\n");
+        break;
+        
         case Declaration_ForeignBlock:
         printf("foreign {\n");
         for(declaration *member = decl->members;
@@ -739,6 +764,8 @@ PrintDeclaration(declaration *decl,  u32 indent)
         case Declaration_Macro:
         printf("define %s;\n", decl->identifier);
         break;
+        
+        
         
         case Declaration_MacroArgs:
         printf("define %s(...);\n", decl->identifier);

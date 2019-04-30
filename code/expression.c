@@ -143,6 +143,8 @@ TryParseTopExpression(lexer_state *lexer)
             {
                 result = NewExpression(Expression_Call);
                 result->call_expr = left;
+                //NOTE temp as I figure out how to handle function pointers
+                Assert(result->call_expr->type == Expression_Identifier);
                 result->call_args = ParseExpression(lexer); 
                 ExpectToken(lexer, ')');
             }
@@ -150,7 +152,18 @@ TryParseTopExpression(lexer_state *lexer)
             {
                 result = NewExpression(Expression_ArraySubscript);
                 result->array_expr = left;
-                result->call_args = ParseExpression(lexer); 
+                result->array_actual_index_expr = ParseExpression(lexer); 
+                expression cexpr = ResolvedExpression(result->array_actual_index_expr);
+                if(cexpr.type)
+                {
+                    result->array_index_expr_as_const = NewExpression(0);
+                    *result->array_index_expr_as_const = cexpr;
+                }
+                else
+                {
+                    after_parse_fixup *fixup = NewFixup(Fixup_ExprNeedsConstExpression);
+                    fixup->expr = result;
+                }
                 ExpectToken(lexer, ']');
             }
             else if(WillEatTokenType(lexer,'.')) //member access(through ptr also)
@@ -563,6 +576,9 @@ ResolvedExpression(expression *expr)
     }
     switch(expr->type)
     {
+        case Expression_Identifier:
+        
+        break;
         case Expression_Binary:
         {
             expression  left = ResolvedExpression(expr->binary_left);
@@ -771,6 +787,8 @@ ResolvedExpression(expression *expr)
         {
             Panic("Not const expression!");
         }break;
+        
+        //default: Panic();
     }
     return result;
 }

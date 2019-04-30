@@ -79,3 +79,15 @@ Checking expressions requires to have a scope in case it is an identifier so we
 can find the decl for that identifier and see if it makes sense;
 
 We also need to check for name collision
+
+
+//Types will kind fix themselves becasue we just leave them "undeclared and fill them later"
+
+//anywhere where expressions as identifierse might be sizeof(type)
+
+Okay. We parse the ast.
+ParseAST(&ast);
+//Parsing will try to solve many errors but won't be perfect
+ASTFixupC(&ast) //we try to solve all errors possible with the ast
+//Then we check for user errors
+CheckAST(&ast)

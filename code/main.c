@@ -201,6 +201,12 @@ ResolvedExpressionType(expression *expr)
     
 }
 
+internal declaration *
+ExpressionResolveDeclaration(expression *expr)
+{
+    return 0;
+}
+
 internal void
 CheckExpression(expression *expr, declaration_list *scope)
 {
@@ -227,11 +233,88 @@ CheckExpression(expression *expr, declaration_list *scope)
         break;
         
         case Expression_MemberAccess:
-        break;
+        {
+            declaration *resolved_decl = ExpressionResolveDeclaration(expr->struct_expr);
+            if(resolved_decl  &&
+               (resolved_decl->type == Declaration_Struct ||
+                resolved_decl->type == Declaration_Union))
+            {
+                //find this in that decl
+                int found = false;
+                for(declaration *member = resolved_decl->members;
+                    member;
+                    member = member->next)
+                {
+                    if(member->identifier = expr->struct_member_identifier)
+                    {
+                        found = true;
+                        break;
+                    }
+                }
+                if(!found)
+                {
+                    printf("Didn't find member in struct by that identifier!");
+                }
+            }
+            else
+            {
+                printf("Left of . didn't resolve to a struct or union declaration");
+            }
+        }break;
+        
+        
         case Expression_Call:
-        break;
+        {
+            declaration *resolved_decl = ExpressionResolveDeclaration(expr->call_expr);
+            if(resolved_decl)
+            {
+                if(resolved_decl->type == Declaration_Procedure)
+                {
+#if 0
+                    //do type checking here
+                    for(expression *call_arg = expr->call_args;
+                        call_arg;
+                        call_arg = call_arg->next)
+                    {
+                        for(declaration *decl_arg = PROC_ARGS(resolved_decl);
+                            decl_arg && decl_arg->type == Declaration_ProcedureArgs;
+                            decl_arg = decl_arg->next)
+                        {
+                            
+                        }
+                    }
+#endif
+                }
+                else printf("Proc call expr wasn't resolved to a procedure!");
+            }
+            else
+            {
+                printf("Proc call expr wasn't resolved to a declaration");
+            }
+        }break;
+        
+        
         case Expression_ArraySubscript:
+        declaration *resolved_decl = ExpressionResolveDeclaration(expr->array_expr);
+        if(resolved_decl)
+        {
+            if(resolved_decl->type == TypeSpec_Ptr ||
+               resolved_decl->type == TypeSpec_Array)
+            {
+                Assert(expr->array_index_expr_as_const);
+            }
+            else
+            {
+                printf("Array expression didn't resolve to a pointer or array declaration!");
+            }
+        }
+        else
+        {
+            printf("array identifer wasn't resolved to a declaration!");
+        }
         break; 
+        
+        
         case Expression_SizeOf:
         break;
         
@@ -249,7 +332,7 @@ CheckExpression(expression *expr, declaration_list *scope)
     }
 }
 
-
+//NOTE all exprs that should be constant should be resolved in the fixup pass
 
 internal void
 CheckStatement(statement *stmt, declaration_list *scope)
@@ -275,11 +358,7 @@ CheckStatement(statement *stmt, declaration_list *scope)
     }
     else if(stmt->type == Statement_SwitchCase) 
     {
-        if(stmt->cond_expr_as_const)
-        {
-            CheckExpression(stmt->cond_expr, scope);
-        }
-        else
+        if(!stmt->cond_expr_as_const)
         {
             printf("case statement doesn't have constant value!");
         }
@@ -319,27 +398,26 @@ CheckStatement(statement *stmt, declaration_list *scope)
     else Panic();
 }
 
-
 internal void 
 CheckDeclaration(declaration *decl, declaration_list *scope)
 {
-    //NOTE 
+    //NOTE we don't have to check for name collisions because always done on DeclListAppend()
     switch(decl->type)
     {
         case Declaration_Struct: case Declaration_Union:
         case Declaration_Enum: case Declaration_EnumFlags:
         Assert(decl->members);
-        declaration_list fake_decl_list = {0};
-        fake_decl_list.decls = decl->members;
-        fake_decl_list.above = scope;
+        Assert(decl->list.above == scope);
         for(declaration *member = decl->members;
             member;
             member = member->next)
         {
-            //TODO maybe finally make *members into a decl_list
-            
-            CheckDeclaration(member, &fake_decl_list);
+            CheckDeclaration(member, &decl->list);
         }
+        break;
+        
+        case Declaration_Procedure:
+        CheckStatement(decl->proc_body, scope);
         break;
         
         case Declaration_Variable: 
@@ -348,51 +426,28 @@ CheckDeclaration(declaration *decl, declaration_list *scope)
             CheckExpression(decl->initializer, scope);
         }
         break;
+        
         case Declaration_Typedef: 
         Panic();
         break;
         
         case Declaration_EnumMember:
-        //should always have an initalizer set and be constant!
+        case Declaration_Constant:
+        case Declaration_Include: 
+        case Declaration_Insert:
         if(!decl->expr_as_const)
         {
+            //TODO store error output info within decls
             printf("Enum member %s doesn't have a constant value", decl->identifier);
         }
         break;
         
-        case Declaration_Procedure:
-        for(declaration *arg = decl->proc_args;
-            arg;
-            arg = arg->next)
-        {
-            if(DeclarationListNameCollision(decl->proc_args, arg))
-            {
-                printf("proc has args with same name(%s)!", arg->identifier);
-            }
-        }
-        CheckStatement(decl->proc_body, scope);
-        
-        
-        break;
-        case Declaration_ProcedureArgs:
-        Panic();
-        break;
-        
-        case Declaration_Constant:
-        Assert(decl->expr_as_const);
-        break;
-        
-        case Declaration_Include: 
-        Assert(decl->expr_as_const);
-        break;
-        
-        case Declaration_Insert:
-        Assert(decl->expr_as_const);
-        break;
-        
         case Declaration_ForeignBlock:
-        
+        // do nothing
         break;
+        
+        case Declaration_ProcedureArgs:
+        default: Panic();
     }
 }
 
@@ -459,6 +514,7 @@ int main(int argc, char **argv)
     expr_zero->integer = 0;
     expr_zero_struct = NewExpression(Expression_CompoundInitializer);
     expr_zero_struct->compound_expr = expr_zero;
+    
     
     stmt_null = NewStatement(Statement_Null);
     
@@ -549,7 +605,11 @@ int main(int argc, char **argv)
         //lexer.past_file = lexer.file;
         
         ParseAST(&ast, &lexer);
-        
+        declaration *pad = NewDeclaration(Declaration_Constant);
+        pad->identifier = StringInternLiteral("__padding__"); //HACK to make DeclListAppend always workd
+        pad->expr_as_const = expr_zero;
+        pad->actual_expr = expr_zero;
+        DeclarationListAppend(&ast, pad);
     }
     else
     {
@@ -578,6 +638,7 @@ int main(int argc, char **argv)
         PrintAST(&ast);
         
 #endif
+        
         AstFixupC(&ast); 
         PrintAST(&ast);
         
