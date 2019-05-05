@@ -14,6 +14,14 @@ NewExpression(expression_type type)
 }
 
 inline expression *
+DuplicateExpression(expression *expr)
+{
+    expression *result = NewExpression(0);
+    *result = *expr;
+    return result;
+}
+
+inline expression *
 NewUnaryExpression(expression_unary_type type, expression *expr)
 {
     Assert(expr);
@@ -143,6 +151,8 @@ TryParseTopExpression(lexer_state *lexer)
             {
                 result = NewExpression(Expression_Call);
                 result->call_expr = left;
+                //NOTE temp as I figure out how to handle function pointers
+                Assert(result->call_expr->type == Expression_Identifier);
                 result->call_args = ParseExpression(lexer); 
                 ExpectToken(lexer, ')');
             }
@@ -150,7 +160,20 @@ TryParseTopExpression(lexer_state *lexer)
             {
                 result = NewExpression(Expression_ArraySubscript);
                 result->array_expr = left;
-                result->call_args = ParseExpression(lexer); 
+                result->array_actual_index_expr = ParseExpression(lexer); 
+                expression cexpr = TryResolveExpression(result->array_actual_index_expr);
+                if(cexpr.type)
+                {
+                    result->array_index_expr_as_const = NewExpression(0);
+                    *result->array_index_expr_as_const = cexpr;
+                }
+                else
+                {
+#if 0
+                    after_parse_fixup *fixup = NewFixup(Fixup_ExprNeedsConstExpression);
+                    fixup->expr = result;
+#endif
+                }
                 ExpectToken(lexer, ']');
             }
             else if(WillEatTokenType(lexer,'.')) //member access(through ptr also)
@@ -542,6 +565,7 @@ _right.type == Expression_Integer)\
     _result.integer = _left.integer _op _right.integer;\
 }
 
+#if 0
 inline int
 CanResolveExpression(expression *expr)
 {
@@ -549,11 +573,12 @@ CanResolveExpression(expression *expr)
     int result = ExpressionIsConstant(&test);
     return result;
 }
+#endif
 
-
-//NOTE this creates a new constant expr, if it already was, then it dups it
+//This is similar to ResolveExpression but can't look
+//up decls for identifiers to solve expressions. Just done as a prepass
 internal expression //returns a constant expression
-ResolvedExpression(expression *expr)
+TryResolveExpression(expression *expr)
 {
     expression result = {0};
     if(ExpressionIsConstant(expr)) //NOTE I think I will make copies
@@ -563,10 +588,12 @@ ResolvedExpression(expression *expr)
     }
     switch(expr->type)
     {
+        case Expression_Identifier:
+        break;
         case Expression_Binary:
         {
-            expression  left = ResolvedExpression(expr->binary_left);
-            expression  right = ResolvedExpression(expr->binary_right);
+            expression  left = TryResolveExpression(expr->binary_left);
+            expression  right = TryResolveExpression(expr->binary_right);
             switch(expr->binary_type)
             {
                 case Binary_Mod:
@@ -677,39 +704,42 @@ ResolvedExpression(expression *expr)
         }break;
         case Expression_Unary:
         {
-            case Unary_Minus:
+            switch(expr->unary_type)
             {
-                expression unary_expr = ResolvedExpression(expr->unary_expr);
-                if(ExpressionIsNumerical(&unary_expr))
+                case Unary_Minus:
                 {
-                    result = unary_expr;
-                    result.negative = !result.negative;
-                }
-            }break;
-            
-            case Unary_Not:
-            {
-                expression unary_expr = ResolvedExpression(expr->unary_expr);
-                if(ExpressionIsNumerical(&unary_expr))
+                    expression unary_expr = TryResolveExpression(expr->unary_expr);
+                    if(ExpressionIsNumerical(&unary_expr))
+                    {
+                        result = unary_expr;
+                        result.negative = !result.negative;
+                    }
+                }break;
+                
+                case Unary_Not:
                 {
-                    if(unary_expr.type == Expression_Integer)
+                    expression unary_expr = TryResolveExpression(expr->unary_expr);
+                    if(ExpressionIsNumerical(&unary_expr))
                     {
-                        unary_expr.integer = !unary_expr.integer;
+                        if(unary_expr.type == Expression_Integer)
+                        {
+                            unary_expr.integer = !unary_expr.integer;
+                        }
+                        else
+                        {
+                            unary_expr.real = !unary_expr.real;
+                        }
                     }
-                    else
-                    {
-                        unary_expr.real = !unary_expr.real;
-                    }
-                }
-            }break;
-            
-            case Unary_Dereference: case Unary_AddressOf:
-            case Unary_PreIncrement: case Unary_PreDecrement:
-            case Unary_PostIncrement: case Unary_PostDecrement:
-            {
-                Panic("Not a constant expression!");
-            }break;
-            default: Panic();
+                }break;
+                
+                case Unary_Dereference: case Unary_AddressOf:
+                case Unary_PreIncrement: case Unary_PreDecrement:
+                case Unary_PostIncrement: case Unary_PostDecrement:
+                {
+                    Panic("Not a constant expression!");
+                }break;
+                default: Panic();
+            }
         }break;
         case Expression_MemberAccess:
         {
@@ -719,13 +749,13 @@ ResolvedExpression(expression *expr)
         }break;
         case Expression_Compound:
         {
-            result = ResolvedExpression(expr->compound_tail);
+            result = TryResolveExpression(expr->compound_tail);
         }
         case Expression_Ternary:
         {
-            expression const_cond = ResolvedExpression(expr->tern_cond);
-            expression const_true = ResolvedExpression(expr->tern_true_expr);
-            expression const_false = ResolvedExpression(expr->tern_false_expr);
+            expression const_cond = TryResolveExpression(expr->tern_cond);
+            expression const_true = TryResolveExpression(expr->tern_true_expr);
+            expression const_false = TryResolveExpression(expr->tern_false_expr);
             if(ExpressionIsConstant(&const_cond) &&
                ExpressionIsConstant(&const_true) &&
                ExpressionIsConstant(&const_false))
@@ -747,6 +777,7 @@ ResolvedExpression(expression *expr)
         
         case Expression_CompoundInitializer:
         {
+#if 0
             bool32 constant = true;
             expression *outer;
             for(outer = expr;
@@ -762,8 +793,9 @@ ResolvedExpression(expression *expr)
             if(constant && outer)
             {
                 //last 
-                result = ResolvedExpression(outer);
+                result = TryResolveExpression(outer);
             }
+#endif
         }break;
         
         case Expression_Cast:case Expression_Call:
@@ -771,6 +803,8 @@ ResolvedExpression(expression *expr)
         {
             Panic("Not const expression!");
         }break;
+        
+        default: Panic();
     }
     return result;
 }

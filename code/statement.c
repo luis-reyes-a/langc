@@ -25,33 +25,61 @@ AppendStatement(statement *compound, statement *stmt)
         compound->compound_stmts = stmt;
         compound->compound_tail = stmt;
     }
-    
 }
 
 
+internal statement *ParseStatement(lexer_state *lexer, declaration_list *list, declaration *top_decl);
 
-
-
-internal declaration *
-FindDeclaration(declaration_list *list, char *identifier)
+internal void
+ParseCompoundStatement(lexer_state *lexer, statement *result, declaration_list *scope, declaration *top_decl)
 {
-    declaration *result = 0;
-    Assert(list && identifier);
-    for(declaration *decl = list->decls;
+    Assert(result && result->type == Statement_Compound);
+    ExpectToken(lexer, '{');
+    result->decl_list.above = scope;
+    statement *stmt = ParseStatement(lexer, &result->decl_list, top_decl);
+    result->compound_stmts = stmt;
+    result->compound_tail = result->compound_stmts;
+    Assert(result->compound_stmts);
+    if(stmt->type == Statement_Declaration)
+    {
+        DeclarationListAppend(&result->decl_list, stmt->decl);
+    }
+    while(PeekToken(lexer).type != '}')
+    {
+        stmt = ParseStatement(lexer, &result->decl_list, top_decl);
+        if(stmt->type == Statement_Declaration)
+        {
+            DeclarationListAppend(&result->decl_list, stmt->decl);
+        }
+        AppendStatement(result, stmt);
+    }
+    ExpectToken(lexer, '}');
+    
+    
+    for(declaration *decl = result->decl_list.decls;
         decl;
         decl = decl->next)
     {
-        if(decl->identifier == identifier)
+        if(decl->type != Declaration_ProcedureArgs)
         {
-            result = decl;
-            break;
+            //can't we have undeclared types in the ProcedureArgs?
+            if(decl->typespec->type == TypeSpec_UnDeclared)
+            {
+                if(top_decl->type == Declaration_Procedure)
+                {
+                    char *header_identifier = ConcatCStringsIntern(top_decl->identifier, "__Header");
+                    decl->typespec->fixup->type = Fixup_DeclBeforeIdentifier;
+                    decl->typespec->fixup->identifier = header_identifier;
+                }
+                else
+                {
+                    Panic(); //when will this happen?
+                    decl->typespec->fixup->decl = top_decl;
+                }
+                
+            }
         }
     }
-    if(!result && list->above)
-    {
-        result = FindDeclaration(list->above, identifier);
-    }
-    return result;
 }
 
 
@@ -123,58 +151,10 @@ ParseStatement(lexer_state *lexer, declaration_list *above, declaration *top_dec
 #endif
         
     }
-    else if(WillEatTokenType(lexer, '{')) //compound
+    else if(PeekToken(lexer).type == '{') //compound
     {
         result = NewStatement(Statement_Compound);
-        result->decl_list.above = above;
-        statement *stmt = ParseStatement(lexer, &result->decl_list, top_decl);
-        result->compound_stmts = stmt;
-        result->compound_tail = result->compound_stmts;
-        Assert(result->compound_stmts);
-        //declaration_list_entry **next_entry = &result->decl_list;
-        if(stmt->type == Statement_Declaration)
-        {
-            DeclarationListAppend(&result->decl_list, stmt->decl);
-            //Assert(*next_entry == 0);
-            //*next_entry = NewDeclarationListEntry(stmt->decl);
-            //while(*next_entry) next_entry = &(*next_entry)->next;
-        }
-        while(PeekToken(lexer).type != '}')
-        {
-            stmt = ParseStatement(lexer, &result->decl_list, top_decl);
-            if(stmt->type == Statement_Declaration)
-            {
-                DeclarationListAppend(&result->decl_list, stmt->decl);
-                //Assert(*next_entry == 0);
-                //*next_entry = NewDeclarationListEntry(stmt->decl);
-                //while(*next_entry) next_entry = &(*next_entry)->next;
-            }
-            
-            AppendStatement(result, stmt);
-#if 0
-            Assert(current->type == Statement_Compound);
-            current->compound_next = ParseStatement(lexer);
-            if(PeekToken(lexer).type != '}')
-            {
-                statement *temp = current->compound_next;
-                current->compound_next = NewStatement(Statement_Compound);
-                current->compound_next->compound_stmt = temp;
-            }
-            current = current->compound_next;
-#endif
-        }
-        ExpectToken(lexer, '}');
-        
-        for(declaration *decl = result->decl_list.decls;
-            decl;
-            decl = decl->next)
-        {
-            if(decl->typespec->type == TypeSpec_UnDeclared)
-            {
-                decl->typespec->fixup->first_decl = top_decl;
-            }
-        }
-        
+        ParseCompoundStatement(lexer, result, above, top_decl);
     }
     else if(WillEatTokenType(lexer, TokenType_Equals)) //switch case statement
     {
@@ -186,11 +166,10 @@ ParseStatement(lexer_state *lexer, declaration_list *above, declaration *top_dec
         else
         {
             result->cond_expr = ParseExpression(lexer);
-            expression cexpr = ResolvedExpression(result->cond_expr);
+            expression cexpr = TryResolveExpression(result->cond_expr);
             if(cexpr.type)
             {
-                result->cond_expr_as_const = NewExpression(0);
-                *result->cond_expr_as_const = cexpr;
+                result->cond_expr_as_const = DuplicateExpression(&cexpr);
             }
             else
             {
@@ -221,10 +200,13 @@ ParseStatement(lexer_state *lexer, declaration_list *above, declaration *top_dec
     }
     else //Try to parse an expression or decl
     {
-        if(WillEatTokenType(lexer, TokenType_Keyword))//struct, union, enum, etc...
+        if(PeekToken(lexer).type == TokenType_Keyword)//struct, union, enum, etc...
         {
             result = NewStatement(Statement_Declaration);
             result->decl = ParseDeclaration(lexer, above);
+            
+            //TODO add it to local scope
+            Assert(result->decl->type != Declaration_Procedure);
             if(result->decl->type == Declaration_Typedef)
             {
                 ExpectToken(lexer, ';');

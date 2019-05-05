@@ -97,7 +97,9 @@ typedef struct expression
             };
             bool32 negative;
         };
-        char *identifier, *string_literal, char_literal;
+        char *identifier;
+        char *string_literal;
+        char char_literal;
         struct //unary
         {
             expression_unary_type unary_type;
@@ -137,7 +139,8 @@ typedef struct expression
         struct //array
         {
             struct expression *array_expr; //
-            struct expression *array_index_expr;
+            struct expression *array_actual_index_expr;
+            struct expression *array_index_expr_as_const;
         };
         struct //cast
         {
@@ -152,7 +155,8 @@ typedef struct expression
     };
 } expression;
 
-internal expression ResolvedExpression(expression *expr);
+
+internal expression TryResolveExpression(expression *expr);
 
 
 expression *expr_zero;

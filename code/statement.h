@@ -60,7 +60,9 @@ typedef struct statement
 } statement;
 
 
-internal statement *ParseStatement(lexer_state *lexer, declaration_list *list, declaration *top_decl);
+inline statement *NewStatement(statement_type type);
+internal void ParseCompoundStatement(lexer_state *lexer, statement *result, declaration_list *scope, declaration *top_decl);
+
 
 static statement *stmt_null;
 

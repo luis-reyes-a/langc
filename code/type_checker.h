@@ -29,11 +29,14 @@ typedef enum
 
 #include "fixup.h"
 
-
+typedef enum{
+    TypeSpecFlags_TypeDeclaredAfterUse = 1 << 0,
+} type_specifier_flags;
 
 typedef struct type_specifier
 {
     type_specifier_type type;
+    type_specifier_flags flags;
     union
     {
         struct
@@ -86,6 +89,9 @@ typedef struct type_specifier
         };
     };
 }type_specifier;
+
+
+
 
 
 struct //NOTE all types are stored in a type table that can be looked up for type checking

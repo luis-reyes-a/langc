@@ -1,44 +1,11 @@
-*implement resolveexpression rename prev to ConstExpression()
-*expression checking and typechecking
-*free list for everything, 
-*implement sizeof expression
-*insert code directly
-*macro expansion and introspection
-*temporarily type anonymous structs/unions for later lookup
+implement resolveexpression rename prev to ConstExpression()
+expression checking and typechecking
+free list for everything, 
+implement sizeof expression
+insert code directly
+macro expansion and introspection
+temporarily type anonymous structs/unions for later lookup
 when using that types in expressions and stuff
-*multiple return values
+multiple return values
 
 
-
-
-
-
-
-
-
-
-
-Execution order
-// () parenthetical
-// calls, arrays, numbers, literals, identifiers
-// * & + ! 
-// * / %
-// + -
-// << >>
-// < > <= >= == != 
-// && 
-// ||
-// ternary
-// assignment
-// compound
-
-//bitwise manipulation
-//NOTE this will have to work on any integral type!
-flags Flags;
-if(Flag.Has(Red, Green, Blue)) // Flag & Green || Flag & Blue || Flag & Red
-Flags.Set(Blue); //sets bit field to 1
-Flags.Clr()      //sets bit field to 0
-Flags.Neg()      //negates bit field, two's complement?
-Flags.Has()      //true if has all bit fields  (F & b) && (F & c) && (F & d)
-Flags.One()      //true if one bifield is set  (F & b) || (F & c) || (f & d)  
-Flags.SetCount() //how many bitfields are set

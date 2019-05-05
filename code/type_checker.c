@@ -107,11 +107,12 @@ AddNewStructUnionType(char *identifier, void *struct_decl)
     else if(check->type == TypeSpec_UnDeclared)
     {
         
-        Assert(check->fixup->first_decl && !check->fixup->decl_after_decl);
-        check->fixup->decl_after_decl = struct_decl;
+        Assert(check->fixup->decl && !check->fixup->decl2);
+        check->fixup->decl2 = struct_decl;
         check->fixup = 0;
         
         check->type = TypeSpec_StructUnion;
+        check->flags |= TypeSpecFlags_TypeDeclaredAfterUse;
         check->identifier = identifier;
         result = check;
     }
@@ -135,11 +136,12 @@ AddNewEnumType(char *identifier, void *enum_decl)
     }
     else if(check->type == TypeSpec_UnDeclared)
     {
-        Assert(check->fixup->first_decl && !check->fixup->decl_after_decl);
-        check->fixup->decl_after_decl = enum_decl;
+        Assert(check->fixup->decl && !check->fixup->decl2);
+        check->fixup->decl2 = enum_decl;
         check->fixup = 0;
         
         check->type = TypeSpec_Enum;
+        check->flags |= TypeSpecFlags_TypeDeclaredAfterUse;
         check->identifier = identifier;
         result = check;
     }

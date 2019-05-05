@@ -445,7 +445,7 @@ OutputExpression(writeable_text_buffer *buffer, expression *expr, char wrapper)
         
         case Expression_ArraySubscript:   
         OutputExpression(buffer, expr->array_expr, 0);
-        OutputExpression(buffer, expr->array_index_expr, '[');
+        OutputExpression(buffer, expr->array_actual_index_expr, '[');
         break; 
         
         
@@ -764,6 +764,41 @@ OutputDeclC(writeable_text_buffer *buffer, declaration *decl)
         OutputCString(buffer, ",\n", 0);
         break;
         
+        case Declaration_ProcedureHeader: //NOTE just prints out foward decls
+        {
+            OutputCString(buffer, "//polymorphic foward declarations for ", 0);
+            OutputCString(buffer, decl->identifier, 0);
+            OutputCString(buffer, "\n", 0);
+            for(declaration *proc = decl->overloaded_list;
+                proc;
+                proc = proc->next)
+            {
+                if(proc->proc_keyword == Keyword_Internal)  
+                    OutputCString(buffer, "static ", 0);
+                else if(proc->proc_keyword == Keyword_External)  
+                    OutputCString(buffer, "extern ", 0);
+                else if(proc->proc_keyword == Keyword_Inline)  
+                    OutputCString(buffer, "inline ", 0); //TODO compiler specific force inline
+                else if(proc->proc_keyword == Keyword_NoInline)  ;
+                //TODO compiler specific force no_inline
+                else Panic();
+                OutputTypeSpecifier(buffer, proc->proc_return_type, ' ');
+                OutputCString(buffer, proc->identifier, 0);
+                OutputChar(buffer, '(', 0);
+                for(declaration *arg = PROC_ARGS(proc);
+                    arg && arg->type == Declaration_ProcedureArgs;
+                    arg = arg->next)
+                {
+                    Assert(arg->type == Declaration_ProcedureArgs);
+                    OutputDeclC(buffer, arg); //TODO optional param!
+                    if(arg->next != 0)
+                        OutputCString(buffer, ", ", 0);
+                }
+                OutputCString(buffer, ");\n", 0);
+            }
+            //Polymorphic foward decl
+        }break;
+        
         case Declaration_Procedure:   
         if(decl->proc_keyword == Keyword_Internal)  
             OutputCString(buffer, "static ", 0);
@@ -778,13 +813,13 @@ OutputDeclC(writeable_text_buffer *buffer, declaration *decl)
         OutputChar(buffer, '\n', 0);
         OutputCString(buffer, decl->identifier, 0); //TODO function_overloading!!!
         OutputChar(buffer, '(', 0);
-        for(declaration *arg = decl->proc_args;
-            arg;
+        for(declaration *arg = PROC_ARGS(decl);
+            arg && arg->type == Declaration_ProcedureArgs;
             arg = arg->next)
         {
             Assert(arg->type == Declaration_ProcedureArgs);
             OutputDeclC(buffer, arg); //TODO optional param!
-            if(!arg->next == 0)
+            if(arg->next != 0)
                 OutputCString(buffer, ", ", 0);
         }
         OutputCString(buffer, ")\n", 0);

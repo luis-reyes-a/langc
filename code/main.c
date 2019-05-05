@@ -58,7 +58,8 @@ PlatformAllocateMemory(u64 size)
 }
 
 #include "cout.c"
-#include "ast.c"
+//#include "ast.c"
+#include "print.c"
 
 
 typedef struct debug_read_file_result
@@ -155,259 +156,7 @@ FileHasExtension(char *filename, char *extension, u32 extension_length)
     return has_extension;
 }
 
-#if 1
-internal void CheckDeclarationList(declaration_list *list);
 
-internal int
-ExpressionResolvesToSturctType(expression *expr)
-{
-    Panic();
-    return 0;
-}
-
-typedef struct
-{
-    expression_type type;
-    union
-    {
-        type_specifier *typespec; //if identifier
-    };
-} resolved_expr_info;
-
-internal resolved_expr_info
-ResolvedExpressionType(expression *expr)
-{
-    resolved_expr_info result = {0};
-    switch(expr->type)
-    {
-        case Expression_StringLiteral:
-        case Expression_CharLiteral:
-        case Expression_Integer:
-        case Expression_RealNumber:
-        result.type = expr->type;
-        break;
-        
-        case Expression_MemberAccess:
-        //will want type info!
-        result.type = Expression_Identifier;
-        break;
-        
-        case Expression_Call:
-        //check return value
-        break;
-        case Expression_ArraySubscript:
-        break; 
-    }
-    
-}
-
-internal void
-CheckExpression(expression *expr, declaration_list *scope)
-{
-    switch(expr->type)
-    {
-        case Expression_Identifier:
-        declaration *decl = FindDeclaration(scope, expr->identifier);
-        if(!decl)
-        {
-            SyntaxError(expr->file, expr->line, "Identifier never declared!");
-        }
-        break;
-        
-        case Expression_StringLiteral:
-        case Expression_CharLiteral:
-        case Expression_Integer:
-        case Expression_RealNumber:
-        //... nothing
-        break;
-        
-        case Expression_Binary:
-        break;
-        case Expression_Unary:
-        break;
-        
-        case Expression_MemberAccess:
-        break;
-        case Expression_Call:
-        break;
-        case Expression_ArraySubscript:
-        break; 
-        case Expression_SizeOf:
-        break;
-        
-        case Expression_Compound:
-        break;
-        case Expression_CompoundInitializer:
-        break;
-        case Expression_Ternary:
-        break;
-        case Expression_Cast:
-        break;
-        
-        case Expression_ToBeDefined:
-        default: Panic();
-    }
-}
-
-
-
-internal void
-CheckStatement(statement *stmt, declaration_list *scope)
-{
-    if(stmt->type == Statement_Expression ||
-       stmt->type == Statement_Return)
-    {
-        CheckExpression(stmt->expr, scope);
-    }
-    
-    
-    else if(stmt->type == Statement_If ||
-            stmt->type == Statement_Switch ||
-            stmt->type == Statement_While)
-    {
-        CheckExpression(stmt->cond_expr, scope);
-        CheckStatement(stmt->cond_stmt, scope);
-    }
-    else if(stmt->type == Statement_Else)
-    {
-        Assert(!stmt->cond_expr);
-        CheckStatement(stmt->cond_stmt, scope);
-    }
-    else if(stmt->type == Statement_SwitchCase) 
-    {
-        if(stmt->cond_expr_as_const)
-        {
-            CheckExpression(stmt->cond_expr, scope);
-        }
-        else
-        {
-            printf("case statement doesn't have constant value!");
-        }
-        CheckStatement(stmt->cond_stmt, scope);
-    }
-    
-    else if(stmt->type == Statement_For) 
-    {
-        CheckStatement(stmt->for_init_stmt, scope);
-        CheckExpression(stmt->for_expr2, scope);
-        CheckExpression(stmt->for_expr3, scope);
-        CheckStatement(stmt->for_stmt, scope);
-    }
-    else if(stmt->type == Statement_Defer)
-    {
-        CheckStatement(stmt->defer_stmt, scope);
-    }
-    else if(stmt->type == Statement_Compound)
-    {
-        CheckDeclarationList(&stmt->decl_list);
-        for(statement *compound = stmt->compound_stmts;
-            compound;
-            compound = compound->next)
-        {
-            CheckStatement(compound, scope);
-        }
-        
-    }
-    else if(stmt->type == Statement_Break ||
-            stmt->type == Statement_Continue ||
-            stmt->type == Statement_Null ||
-            stmt->type == Statement_Declaration) //this should always be checked already
-    
-    {
-        //ignore
-    }
-    else Panic();
-}
-
-
-internal void 
-CheckDeclaration(declaration *decl, declaration_list *scope)
-{
-    //NOTE 
-    switch(decl->type)
-    {
-        case Declaration_Struct: case Declaration_Union:
-        case Declaration_Enum: case Declaration_EnumFlags:
-        Assert(decl->members);
-        declaration_list fake_decl_list = {0};
-        fake_decl_list.decls = decl->members;
-        fake_decl_list.above = scope;
-        for(declaration *member = decl->members;
-            member;
-            member = member->next)
-        {
-            //TODO maybe finally make *members into a decl_list
-            
-            CheckDeclaration(member, &fake_decl_list);
-        }
-        break;
-        
-        case Declaration_Variable: 
-        if(decl->initializer)
-        {
-            CheckExpression(decl->initializer, scope);
-        }
-        break;
-        case Declaration_Typedef: 
-        Panic();
-        break;
-        
-        case Declaration_EnumMember:
-        //should always have an initalizer set and be constant!
-        if(!decl->expr_as_const)
-        {
-            printf("Enum member %s doesn't have a constant value", decl->identifier);
-        }
-        break;
-        
-        case Declaration_Procedure:
-        for(declaration *arg = decl->proc_args;
-            arg;
-            arg = arg->next)
-        {
-            if(DeclarationListNameCollision(decl->proc_args, arg))
-            {
-                printf("proc has args with same name(%s)!", arg->identifier);
-            }
-        }
-        CheckStatement(decl->proc_body, scope);
-        
-        
-        break;
-        case Declaration_ProcedureArgs:
-        Panic();
-        break;
-        
-        case Declaration_Constant:
-        Assert(decl->expr_as_const);
-        break;
-        
-        case Declaration_Include: 
-        Assert(decl->expr_as_const);
-        break;
-        
-        case Declaration_Insert:
-        Assert(decl->expr_as_const);
-        break;
-        
-        case Declaration_ForeignBlock:
-        
-        break;
-    }
-}
-
-
-internal void
-CheckDeclarationList(declaration_list *ast)
-{
-    for(declaration *decl = ast->decls;
-        decl;
-        decl = decl->next)
-    {
-        CheckDeclaration(decl, ast);
-    }
-}
-#endif
 
 internal void
 PrintTypeTable()
@@ -459,6 +208,7 @@ int main(int argc, char **argv)
     expr_zero->integer = 0;
     expr_zero_struct = NewExpression(Expression_CompoundInitializer);
     expr_zero_struct->compound_expr = expr_zero;
+    
     
     stmt_null = NewStatement(Statement_Null);
     
@@ -549,7 +299,11 @@ int main(int argc, char **argv)
         //lexer.past_file = lexer.file;
         
         ParseAST(&ast, &lexer);
-        
+        declaration *pad = NewDeclaration(Declaration_Constant);
+        pad->identifier = StringInternLiteral("__padding__"); //HACK to make DeclListAppend always workd
+        pad->expr_as_const = expr_zero;
+        pad->actual_expr = expr_zero;
+        DeclarationListAppend(&ast, pad);
     }
     else
     {
@@ -577,13 +331,18 @@ int main(int argc, char **argv)
 #if DEBUG_BUILD
         PrintAST(&ast);
         
+        OutputC(&ast, output_filepath);
+        
 #endif
-        AstFixupC(&ast); 
-        PrintAST(&ast);
+        //FixAST(&ast);
+        
+        //AstFixupC(&ast); 
+        //PrintAST(&ast);
+        Panic("Stop!!!");
         
         //Does type checking and expression checking
         //CheckDeclarationList(&ast);
-        Panic("Stop!!!");
+        
         
         
         
