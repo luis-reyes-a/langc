@@ -1,0 +1,13 @@
+implement resolveexpression rename prev to ConstExpression()
+expression checking and typechecking
+free list for everything, 
+implement sizeof expression
+insert code directly
+macro expansion and introspection
+temporarily type anonymous structs/unions for later lookup
+when using that types in expressions and stuff
+multiple return values
+
+
+concat literal strings like "hello " "world"
+

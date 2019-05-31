@@ -1,0 +1,100 @@
+These are the basic types a user can define
+
+TypeSpec_Internal;
+TypeSpec_StructUnion; 
+TypeSpec_Enum; //and enum flags
+TypeSpec_Ptr;
+TypeSpec_Array;
+TypeSpec_Proc;
+
+Whenever the language attempts to parse a type it checks to see if that type has been
+"declared" yet. If the type hasn't been declared I still allocate a type for that 
+type, mark it as "undeclared" and resolve it later.
+
+Later when declaring the type (whenever AddType() is called...) I look for an undeclared type by that name and update it in accordance to how it's declared.
+
+This, however, will NOT FIX DECL ORDERING. I still need to do myself after the parse
+
+
+Two main cases for out of order decls:
+1) Type of declared variable before the type declaration
+2) Expression uses an identifier before it was decalred
+
+
+So far the decl_list is behaving like a scope. It stores all declared decls in a scope. It is passed in to ParseStatement so when it generate a scope for a compound stmt it points to the *above scope when searching
+
+while(WillEatTokenType(lexer, TokenType_Identifier)){
+	//...
+}
+else{
+	//...
+}
+
+=>
+{
+	bool32 FirstCheck = WillEat();
+	if(FirstCheck){
+		while(FirstCheck || WillEat()){
+			//NOTE short-circuiting prevents WillEat from 
+			// being called twice on first pass
+			FirstCheck = false;
+		}
+	}
+	else{
+		//..do whatever
+	}
+}
+
+
+Execution order
+// () parenthetical
+// calls, arrays, numbers, literals, identifiers
+// * & + ! 
+// * / %
+// + -
+// << >>
+// < > <= >= == != 
+// && 
+// ||
+// ternary
+// assignment
+// compound
+
+flags Flags;
+if(Flag.Has(Red, Green, Blue)) // Flag & Green || Flag & Blue || Flag & Red
+Flags.Set(Blue); //sets bit field to 1
+Flags.Clr()      //sets bit field to 0
+Flags.Neg()      //negates bit field, two's complement?
+Flags.Has()      //true if has all bit fields  (F & b) && (F & c) && (F & d)
+Flags.One()      //true if one bifield is set  (F & b) || (F & c) || (f & d)  
+Flags.SetCount() //how many bitfields are set
+
+Okay I changed what I wanted.
+
+Now, I disallow expression identifiers to be used before being declared
+you cant do
+int b = a;
+int a = 0;
+
+However, expression call can be out of order and expression involving sizeof
+only handle sizeof for now!
+
+{
+	//this is valid and easy to deal with, you just foward declare
+	foo_call();
+}
+
+
+foo_call()
+
+
+What are lvalues and rvalues for?
+
+A variable is an object in memory. Somewhere in memory with values stored in it.
+We can refer to it by declaring an identifier to that memory and using the id.
+We can also do some more crazy stuff involving pointer manipulation.
+
+An object is a named region in memory. It's a variable.
+An lvalue is an expression reffering to an object.
+
+*ptr is an lvalue "object to which ptr points to"
